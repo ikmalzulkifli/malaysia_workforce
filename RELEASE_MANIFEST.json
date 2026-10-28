@@ -21,8 +21,8 @@
     },
     {
       "path": ".github/workflows/amd64-release.yml",
-      "size": 18467,
-      "sha256": "06d07acd148f08f8f6d57612dc5ae7abb9b994ee9ba74df33b23c205fb7cef69"
+      "size": 18591,
+      "sha256": "eb23670222df8eff016b23fec9fd25c0f7f611cb6c1efe0c17823b1f10854398"
     },
     {
       "path": ".github/workflows/ci.yml",

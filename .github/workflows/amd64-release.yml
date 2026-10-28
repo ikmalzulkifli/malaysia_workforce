@@ -295,11 +295,14 @@ jobs:
           "${C[@]}" run --rm -e RESTORE_TARGET_DB=payroll_restore_existing restore "/backup/$(basename "$BK")" >/tmp/existing.log 2>&1
           EXISTING=$?
           MARKER=$(docker exec ocean6-payroll-ci-db-1 sh -c "MYSQL_PWD='$DBPASS' mariadb -uroot -N -e 'select count(*) from payroll_restore_existing.marker'")
-          rm -rf /tmp/restore-dir && mkdir -p /tmp/restore-dir && echo keep > /tmp/restore-dir/marker.txt
-          "${C[@]}" run --rm -v /tmp/restore-dir:/tmp/restore-dir -e RESTORE_TARGET_DB=payroll_restore_e \
-            -e RESTORE_FILES_DIR=/tmp/restore-dir restore "/backup/$(basename "$BK")" >/tmp/existingdir.log 2>&1
+          # restore.sh only accepts extraction paths under /tmp/payroll-restore-;
+          # use a valid pre-existing directory to exercise the guard.
+          DIR=/tmp/payroll-restore-existing
+          rm -rf "$DIR" && mkdir -p "$DIR" && echo keep > "$DIR/marker.txt"
+          "${C[@]}" run --rm -v "$DIR:$DIR" -e RESTORE_TARGET_DB=payroll_restore_e \
+            -e RESTORE_FILES_DIR="$DIR" restore "/backup/$(basename "$BK")" >/tmp/existingdir.log 2>&1
           EXISTINGDIR=$?
-          DIRMARKER=$(cat /tmp/restore-dir/marker.txt)
+          DIRMARKER=$(cat "$DIR/marker.txt")
           "${C[@]}" run --rm -e RESTORE_TARGET_DB=payroll_restore_ok restore "/backup/$(basename "$BK")" >/tmp/fresh.log 2>&1
           FRESH=$?
           set -e
