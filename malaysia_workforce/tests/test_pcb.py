@@ -418,7 +418,7 @@ def test_additional_mtd_uses_unfloored_step_c_when_normal_mtd_is_below_rm10():
 	"""Step 1[E] projects the year with Step[C], not the RM10-floored amount.
 
 	Before this fix, a low earner with a bonus had the whole annual tax charged as
-	additional MTD (RM86.00 here) instead of the bonus's marginal tax.
+	additional MTD (the full annual tax, RM122.00 here) instead of the bonus's marginal tax.
 	"""
 	result = calculate_pcb(
 		PCBInput(

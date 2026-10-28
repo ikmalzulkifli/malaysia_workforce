@@ -26,8 +26,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "size": 19280,
-      "sha256": "f97776abc294c06f046fe6496ea1582f41bf3d5f57ff0f245dcb9aa7b6284a64"
+      "size": 19338,
+      "sha256": "d360523f509094c3be88867fa8004ae1a368f93a041873ccb3019f22a1cb09b7"
     },
     {
       "path": "README.md",
@@ -676,8 +676,8 @@
     },
     {
       "path": "malaysia_workforce/tests/test_pcb.py",
-      "size": 16061,
-      "sha256": "9e62a5a29bb2b2dcc5d8ee3da7a4c798126a5f5058df20ddd09f8f6e518055e2"
+      "size": 16083,
+      "sha256": "018164d352e1f757460d8fe6a4d1f1ff9cadd90c5797a97b82683e57448a3388"
     },
     {
       "path": "malaysia_workforce/tests/test_statutory_profiles.py",
