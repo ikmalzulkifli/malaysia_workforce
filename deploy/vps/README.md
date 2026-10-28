@@ -49,8 +49,11 @@ process.
 4. **[approval] Snapshot.** Confirm a recent Lightsail auto-snapshot; take a
    manual snapshot before the ingress change if policy requires it.
 5. PDF renderer: the image ships `wkhtmltopdf`; the app selects it when present.
-6. Build the image locally and push or load it on the host:
-   `docker build -f deploy/vps/Dockerfile -t ocean6-payroll:pilot-3613560 .`
+6. Build the image for the VPS architecture and push or load it:
+   `docker build --platform linux/amd64 -f deploy/vps/Dockerfile -t ocean6-payroll:pilot-513665a .`
+   The Lightsail instance is x86_64; a workstation build is usually arm64.
+   Build with `--platform linux/amd64` (or on an amd64 builder) and verify the
+   image runs before loading it on the host.
 
 ## Deploy (exact commands, run on the host from the payroll runtime directory)
 
@@ -65,9 +68,10 @@ cd /opt/ocean6-payroll/runtime
 cp payroll.env.example payroll.env && chmod 0600 payroll.env
 # edit payroll.env: SITE_NAME, SITE_URL, RUNTIME_DIR, BACKUP_DIR, APP_IMAGE_TAG,
 # and generate DB_ROOT_PASSWORD, DB_PASSWORD, REDIS_CACHE_PASSWORD,
-# REDIS_QUEUE_PASSWORD, ADMIN_PASSWORD (openssl rand -base64 32).
-# sites/common_site_config.json is rendered inside the payroll_sites volume on
-# first start; no host copy is needed.
+# REDIS_QUEUE_PASSWORD, ADMIN_PASSWORD (openssl rand -base64 32 is fine).
+# The setup role renders sites/common_site_config.json inside the payroll_sites
+# volume and percent-encodes the Redis credentials, so any password is valid.
+# Setup is the single writer of shared assets and config; app roles only verify.
 
 # 2. Infrastructure services first
 docker compose --env-file payroll.env -f compose.yaml up -d db redis-cache redis-queue
@@ -79,11 +83,20 @@ docker compose --env-file payroll.env -f compose.yaml run --rm setup
 docker compose --env-file payroll.env -f compose.yaml up -d web worker scheduler socketio frontend
 
 # 5. Ingress (one appended block; back up first)
-cp /opt/ocean6-nextcloud/runtime/Caddyfile \
-   /opt/ocean6-nextcloud/runtime/Caddyfile.bak-$(date -u +%Y%m%dT%H%M%SZ)
+NC=/opt/ocean6-nextcloud/runtime
+cp "$NC/Caddyfile" "$NC/Caddyfile.bak-$(date -u +%Y%m%dT%H%M%SZ)"
 # replace __PILOT_ALLOW_CIDR__ with the verified IP, then append Caddyfile.payroll
-docker compose -p ocean6-nextcloud exec caddy caddy reload --config /etc/caddy/Caddyfile
+NC=/opt/ocean6-nextcloud/runtime
+docker compose -p ocean6-nextcloud --env-file "$NC/runtime.env" -f "$NC/compose.yaml" \
+  exec caddy caddy reload --config /etc/caddy/Caddyfile
 ```
+
+## Asset fetching for PDFs
+
+wkhtmltopdf renders print HTML and fetches `/assets/...` from the site URL. The
+compose file maps `${SITE_NAME}` to the host gateway (`extra_hosts`), so the
+request reaches the host's Caddy even when public DNS or NAT hairpin is
+unavailable. The site hostname must have a certificate valid for that name.
 
 ## Local validation findings (baked into these files)
 
@@ -135,7 +148,9 @@ Backup and restore (scratch restore, never over the live DB):
 
 ```bash
 docker compose --env-file payroll.env -f compose.yaml run --rm backup
-docker compose --env-file payroll.env -f compose.yaml run --rm restore /backup/payroll-<stamp>  # container path
+# restore is scratch-only: choose a NEW payroll_restore_* database name
+docker compose --env-file payroll.env -f compose.yaml run --rm \
+  -e RESTORE_TARGET_DB=payroll_restore_1 restore /backup/payroll-<stamp>
 ```
 
 ## Rollback (non-destructive)
@@ -143,7 +158,9 @@ docker compose --env-file payroll.env -f compose.yaml run --rm restore /backup/p
 ```bash
 # 1. Ingress: restore the Caddyfile backup and reload
 cp /opt/ocean6-nextcloud/runtime/Caddyfile.bak-<stamp> /opt/ocean6-nextcloud/runtime/Caddyfile
-docker compose -p ocean6-nextcloud exec caddy caddy reload --config /etc/caddy/Caddyfile
+NC=/opt/ocean6-nextcloud/runtime
+docker compose -p ocean6-nextcloud --env-file "$NC/runtime.env" -f "$NC/compose.yaml" \
+  exec caddy caddy reload --config /etc/caddy/Caddyfile
 
 # 2. Payroll containers and network only; volumes and config are preserved
 cd /opt/ocean6-payroll/runtime

@@ -1,0 +1,9 @@
+.git
+.github
+.pytest_cache
+**/__pycache__
+**/*.pyc
+docs
+scripts
+CHANGELOG.md
+RELEASE_MANIFEST.json

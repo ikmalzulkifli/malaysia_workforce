@@ -8,6 +8,11 @@ x-app: &app
   env_file:
     - ${RUNTIME_DIR:?RUNTIME_DIR is required}/payroll.env
   init: true
+  # wkhtmltopdf renders print HTML and fetches assets from the site URL. Map the
+  # public hostname to the host gateway so the request reaches Caddy locally
+  # instead of relying on public DNS or NAT hairpin.
+  extra_hosts:
+    - "${SITE_NAME:?SITE_NAME is required}:host-gateway"
   networks:
     - payroll_internal
   volumes:

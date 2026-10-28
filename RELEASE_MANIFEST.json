@@ -5,6 +5,11 @@
   "file_count": 158,
   "files": [
     {
+      "path": ".dockerignore",
+      "size": 99,
+      "sha256": "ebd6c095fc8cf7773cbfa586c795cab2111aefd9004e57bd20028abd2a9ed6b8"
+    },
+    {
       "path": ".editorconfig",
       "size": 226,
       "sha256": "2010738b3b0a0eceef563f76a8eb6ed38f3a06f37bc35c8fda371c90e741ef19"
@@ -46,43 +51,38 @@
     },
     {
       "path": "deploy/vps/Dockerfile",
-      "size": 3061,
-      "sha256": "23820e09c3723f615bfdea0cdcc81ac0db73cd0fd5841b0158a22e1e0f99288c"
+      "size": 3389,
+      "sha256": "de9b6be4ee75a7c849e571a5922f5dd701c063d1a345d580cb26890893f9b60b"
     },
     {
       "path": "deploy/vps/README.md",
-      "size": 8605,
-      "sha256": "5a45cd2d015d7b6d6bf836f7b7a773ca023d94048235dc323d9f94c3fc271787"
+      "size": 9548,
+      "sha256": "cf808782770ccdb6931e599707c59e5a35d09bef5e65fa577a071b23b1da40ee"
     },
     {
       "path": "deploy/vps/backup.sh",
-      "size": 876,
-      "sha256": "0854f2b0162a687771c1e167570f29624bf7dc8044b30cfdc0a57a0089478d4c"
-    },
-    {
-      "path": "deploy/vps/common_site_config.json.template",
-      "size": 347,
-      "sha256": "010bf5c9f7c3a3640be6dbf34731470e5b9eba3ab622d2b7c99ce3a294d699fa"
+      "size": 1018,
+      "sha256": "b52af36dfa1bedc8c7d7fed7d4d8900afe8bcb2b459938ce49d0d0eaae43a10a"
     },
     {
       "path": "deploy/vps/compose.local.yaml",
-      "size": 704,
-      "sha256": "9245b344fdb08d6208eddd3dc66a22e70295769c4d0b2063970ba09b7fe87296"
+      "size": 694,
+      "sha256": "f6e322ef09bf53ad3a00b8a2ad64cf2d8e8a6597aa0579ce95bdeb2603bdb07f"
     },
     {
       "path": "deploy/vps/compose.yaml",
-      "size": 4878,
-      "sha256": "672b282635b2ac271232efc2a00eaad78c16ac528ae9fd7a1450bdb8d09c82bc"
+      "size": 5161,
+      "sha256": "599c2596d5b0915e78c7fde010b30130390e8cc50c1bb64b2f3ac3006314d1c1"
     },
     {
       "path": "deploy/vps/entrypoint.sh",
-      "size": 2656,
-      "sha256": "d08d01e7d9a47b4c4d43b4b3ad3a18e17c7cdf4fcdf08dd47cbfb9fd252abb24"
+      "size": 3187,
+      "sha256": "5e7535e83f6e395281e3d4a0df3ce6696c9cfdfbf7e499a7506fabbb9fcd1d50"
     },
     {
       "path": "deploy/vps/frontend/default.conf.template",
-      "size": 2342,
-      "sha256": "2c59fc0d0ae945dfadac63de35e052a8ef30a5072b6677c69465fef58fd3354a"
+      "size": 2797,
+      "sha256": "8be973ff597abdc597ed057883c1728da9571f52d3a337fd5b7e2cb76ba74bc0"
     },
     {
       "path": "deploy/vps/frontend/entrypoint.sh",
@@ -96,8 +96,8 @@
     },
     {
       "path": "deploy/vps/restore.sh",
-      "size": 1000,
-      "sha256": "dccbad78f625592492a54340f3a39fac3e1b2d16fa4e643a0f7eac41163bd1b6"
+      "size": 1971,
+      "sha256": "7d2ef7f3b727a288a7ee490ce0a3c1003eecc14dd68bd0c8b7628d6f8ffee642"
     },
     {
       "path": "deploy/vps/setup.sh",

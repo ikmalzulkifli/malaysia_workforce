@@ -8,8 +8,8 @@ SITE="${SITE_NAME:?SITE_NAME is required}"
 ROLE="${ROLE:?ROLE is required}"
 
 bootstrap_sites_volume() {
-  # The sites directory is a named volume. Seed apps.txt and this image's built
-  # assets once per image tag, and render common_site_config.json on first start.
+  # Single writer: only the setup role seeds shared assets, apps.txt and the
+  # common config. Application roles verify and never write shared state.
   mkdir -p "$BENCH/sites"
   if [ ! -f "$BENCH/sites/apps.txt" ]; then
     cp /opt/seed-apps.txt "$BENCH/sites/apps.txt"
@@ -20,33 +20,56 @@ bootstrap_sites_volume() {
     cp -a /opt/seed-assets "$BENCH/sites/assets"
     echo "$asset_sha" > "$BENCH/sites/assets/.image"
   fi
-  # Always render the managed common config: a new named volume inherits the
-  # image's bench-init default, which points at localhost and has no passwords.
-  envsubst '${REDIS_CACHE_PASSWORD} ${REDIS_QUEUE_PASSWORD}' \
-    < /opt/common_site_config.json.template > "$BENCH/sites/common_site_config.json.tmp.$$"
-  mv "$BENCH/sites/common_site_config.json.tmp.$$" "$BENCH/sites/common_site_config.json"
+  python3 - "$BENCH/sites/common_site_config.json" <<'PYCFG'
+import json, os, sys
+from urllib.parse import quote
+
+def redis_url(host, db, variable):
+    value = os.environ.get(variable, "")
+    if not value:
+        raise SystemExit(f"{variable} must be set")
+    return f"redis://:{quote(value, safe='')}@{host}:6379/{db}"
+
+config = {
+    "db_host": "db",
+    "redis_cache": redis_url("redis-cache", 0, "REDIS_CACHE_PASSWORD"),
+    "redis_queue": redis_url("redis-queue", 1, "REDIS_QUEUE_PASSWORD"),
+    "redis_socketio": redis_url("redis-cache", 2, "REDIS_CACHE_PASSWORD"),
+    "serve_default_site": True,
+    "gunicorn_workers": int(os.environ.get("GUNICORN_WORKERS", "2")),
+    "webserver_port": 8000,
+    "socketio_port": 9000,
+}
+target = sys.argv[1]
+tmp = target + ".tmp"
+with open(tmp, "w", encoding="utf-8") as handle:
+    json.dump(config, handle, indent=2)
+os.replace(tmp, target)
+PYCFG
   chown -R frappe:frappe "$BENCH/sites"
 }
 
-prepare_site_dir() {
-  # Never create the site directory here: an empty directory makes `bench new-site`
-  # believe the site exists and refuse to initialise it.
-  if [ ! -d "$BENCH/sites/$SITE" ]; then
-    echo "Site $SITE is not initialised; run the setup service first." >&2
-    exit 66
-  fi
-  chown -R frappe:frappe "$BENCH/sites/$SITE" 2>/dev/null || true
+require_initialised() {
+  # Application roles are readers. A missing seed means setup has not run.
+  [ -f "$BENCH/sites/common_site_config.json" ] || {
+    echo "Payroll stack not initialised: run the setup service first." >&2; exit 66; }
+  [ -d "$BENCH/sites/$SITE" ] || {
+    echo "Site $SITE missing: run the setup service first." >&2; exit 66; }
+  [ -d "$BENCH/sites/assets" ] || {
+    echo "Assets missing: run the setup service first." >&2; exit 66; }
 }
 
 case "$ROLE" in
-  setup|web|worker|scheduler|socketio)
+  setup)
     bootstrap_sites_volume
+    ;;
+  web|worker|scheduler|socketio)
+    require_initialised
     ;;
 esac
 
 case "$ROLE" in
   web)
-    prepare_site_dir
     cd "$BENCH/sites"
     exec gosu frappe "$BENCH/env/bin/gunicorn" \
       -b 0.0.0.0:8000 \
@@ -56,17 +79,14 @@ case "$ROLE" in
       frappe.app:application --preload
     ;;
   worker)
-    prepare_site_dir
     cd "$BENCH"
     exec gosu frappe bench worker --queue short,default,long
     ;;
   scheduler)
-    prepare_site_dir
     cd "$BENCH"
     exec gosu frappe bench schedule
     ;;
   socketio)
-    prepare_site_dir
     cd "$BENCH"
     exec gosu frappe bench socketio
     ;;

@@ -3,7 +3,7 @@
 services:
   frontend:
     ports:
-      - "127.0.0.1:8088:8080"
+      - "8088:8080"
   # Local workstation cache only; the committed compose pins the reviewed tags.
   db:
     image: mariadb:11.4

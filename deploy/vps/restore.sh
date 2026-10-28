@@ -1,21 +1,43 @@
 #!/bin/bash
-# Restore a payroll backup. Default target is a SCRATCH database; restoring over
-# the live site requires an explicit RESTORE_TARGET_DB plus separate approval.
+# Scratch-only restore. Never drops or overwrites an existing database.
+# The target must be a new database named payroll_restore_*.
 set -euo pipefail
 
-SRC="${1:?usage: restore.sh <backup-dir>}"
-TARGET_DB="${RESTORE_TARGET_DB:-payroll_restore_$(date -u +%s)}"
+SRC="${1:?usage: restore.sh <backup-dir>  (container path, usually /backup/payroll-<stamp>)}"
+TARGET_DB="${RESTORE_TARGET_DB:-}"
 BENCH=/home/frappe/frappe-bench
+
+[ -n "$TARGET_DB" ] || { echo "RESTORE_TARGET_DB is required (new scratch database name)" >&2; exit 64; }
+case "$TARGET_DB" in
+  payroll_restore_*) ;;
+  *) echo "refusing: target database must start with payroll_restore_" >&2; exit 64 ;;
+esac
+if ! [[ "$TARGET_DB" =~ ^[A-Za-z0-9_]{1,48}$ ]]; then
+  echo "refusing: target database name contains unsupported characters" >&2
+  exit 64
+fi
 
 [ -f "$SRC/database.sql" ] || { echo "missing $SRC/database.sql" >&2; exit 66; }
 [ -f "$SRC/site-files.tgz" ] || { echo "missing $SRC/site-files.tgz" >&2; exit 66; }
-( cd "$SRC" && sha256sum -c SHA256SUMS )
+[ -f "$SRC/SHA256SUMS" ] || { echo "missing $SRC/SHA256SUMS" >&2; exit 66; }
 
-mysql --host=db --user=root --password="$DB_ROOT_PASSWORD" \
-  -e "DROP DATABASE IF EXISTS \`$TARGET_DB\`; CREATE DATABASE \`$TARGET_DB\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-mysql --host=db --user=root --password="$DB_ROOT_PASSWORD" "$TARGET_DB" < "$SRC/database.sql"
+# Checksums are relative to the selected backup directory, so a copied or
+# modified backup is verified against its own files, not the originals.
+( cd "$SRC" && sha256sum -c SHA256SUMS ) || { echo "checksum verification failed for $SRC" >&2; exit 67; }
+
+EXISTS="$(MYSQL_PWD="$DB_ROOT_PASSWORD" mysql --host=db --user=root --batch --skip-column-names \
+  -e "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='$TARGET_DB'")"
+if [ -n "$EXISTS" ]; then
+  echo "refusing: database $TARGET_DB already exists; choose a new payroll_restore_* name" >&2
+  exit 68
+fi
+
+MYSQL_PWD="$DB_ROOT_PASSWORD" mysql --host=db --user=root \
+  -e "CREATE DATABASE \`$TARGET_DB\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+MYSQL_PWD="$DB_ROOT_PASSWORD" mysql --host=db --user=root "$TARGET_DB" < "$SRC/database.sql"
 
 EXTRACT="${RESTORE_FILES_DIR:-/tmp/payroll-restore-$TARGET_DB}"
+rm -rf "$EXTRACT"
 mkdir -p "$EXTRACT"
 tar -C "$EXTRACT" -xzf "$SRC/site-files.tgz"
 echo "RESTORE_OK db=$TARGET_DB files=$EXTRACT"

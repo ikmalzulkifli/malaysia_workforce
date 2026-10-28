@@ -24,8 +24,12 @@ RUN bench init --frappe-branch v16.31.0 --skip-redis-config-generation --skip-as
 WORKDIR /home/frappe/frappe-bench
 RUN bench get-app --branch v16.31.1 https://github.com/frappe/erpnext \
  && bench get-app --branch v16.16.0 https://github.com/frappe/hrms
-COPY --chown=frappe:frappe . /home/frappe/app-src
-RUN bench get-app /home/frappe/app-src
+# Copy only what the app needs; the build context is restricted by .dockerignore.
+COPY --chown=frappe:frappe pyproject.toml package.json README.md license.txt /home/frappe/frappe-bench/apps/malaysia_workforce/
+COPY --chown=frappe:frappe malaysia_workforce /home/frappe/frappe-bench/apps/malaysia_workforce/malaysia_workforce
+RUN printf "frappe\nerpnext\nhrms\nmalaysia_workforce\n" > sites/apps.txt \
+ && mkdir -p apps/malaysia_workforce/node_modules \
+ && env/bin/pip install -e apps/malaysia_workforce
 RUN bench build --production
 
 FROM python:3.14-slim-bookworm
@@ -47,7 +51,6 @@ COPY --from=builder /home/frappe/frappe-bench /home/frappe/frappe-bench
 RUN cp -a /home/frappe/frappe-bench/sites/assets /opt/seed-assets \
  && cp /home/frappe/frappe-bench/sites/apps.txt /opt/seed-apps.txt \
  && sha256sum /opt/seed-assets/assets.json | cut -d' ' -f1 > /opt/assets.sha
-COPY deploy/vps/common_site_config.json.template /opt/common_site_config.json.template
 COPY deploy/vps/entrypoint.sh /opt/entrypoint.sh
 COPY deploy/vps/setup.sh /opt/setup.sh
 COPY deploy/vps/backup.sh /opt/backup.sh
