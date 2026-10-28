@@ -1,0 +1,96 @@
+name: amd64-release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and smoke linux/amd64
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show pinned stack
+        run: |
+          cat compatibility-lock.json
+          docker version --format '{{.Server.Version}}'
+          uname -m
+
+      - name: Build image
+        run: |
+          docker build --platform linux/amd64 \
+            -f deploy/vps/Dockerfile \
+            -t "ocean6-payroll:pilot-${GITHUB_SHA::7}" .
+
+      - name: Image smoke
+        run: |
+          IMG="ocean6-payroll:pilot-${GITHUB_SHA::7}"
+          docker run --rm --entrypoint python3 "$IMG" -c "import frappe, erpnext, hrms, malaysia_workforce; print('frappe', frappe.__version__); print('erpnext', erpnext.__version__); print('hrms', hrms.__version__); print('app', malaysia_workforce.__version__)"
+          docker run --rm --entrypoint node "$IMG" --version
+          docker run --rm --entrypoint sh "$IMG" -c "printf '<p>smoke</p>' | wkhtmltopdf -q - /tmp/s.pdf && head -c 4 /tmp/s.pdf"
+          docker image inspect "$IMG" --format 'id={{.Id}} arch={{.Os}}/{{.Architecture}}'
+
+      - name: Stack smoke
+        run: |
+          set -euo pipefail
+          IMG="ocean6-payroll:pilot-${GITHUB_SHA::7}"
+          RUNTIME="$GITHUB_WORKSPACE/runtime"
+          mkdir -p "$RUNTIME/backups"
+          {
+            echo "SITE_NAME=payroll.localhost"
+            echo "SITE_URL=http://payroll.localhost:8088"
+            echo "RUNTIME_DIR=$RUNTIME"
+            echo "BACKUP_DIR=$RUNTIME/backups"
+            echo "APP_IMAGE_TAG=pilot-${GITHUB_SHA::7}"
+            echo "GUNICORN_WORKERS=2"
+            echo "FRONTEND_INTERNAL_IP=10.42.61.10"
+            echo "TRUSTED_PROXY_IP=10.42.61.10"
+            echo "DB_ROOT_PASSWORD=$(openssl rand -hex 16)"
+            echo "DB_PASSWORD=$(openssl rand -hex 16)"
+            echo "REDIS_CACHE_PASSWORD=ci/cache@1"
+            echo "REDIS_QUEUE_PASSWORD=ci#queue/2"
+            echo "ADMIN_PASSWORD=$(openssl rand -hex 12)"
+            echo "INGRESS_NETWORK=payroll-ci-ingress"
+          } > "$RUNTIME/payroll.env"
+          chmod 600 "$RUNTIME/payroll.env"
+          docker network create payroll-ci-ingress >/dev/null 2>&1 || true
+          C=(docker compose --env-file "$RUNTIME/payroll.env" -f deploy/vps/compose.yaml -f deploy/vps/compose.local.yaml -p ocean6-payroll-ci)
+          "${C[@]}" up -d --no-build db redis-cache redis-queue
+          "${C[@]}" run --rm --no-build setup
+          "${C[@]}" up -d --no-build web worker scheduler socketio frontend
+          for i in $(seq 1 60); do
+            if curl -fsS -H 'Host: payroll.localhost' http://127.0.0.1:8088/api/method/ping >/dev/null 2>&1; then break; fi
+            sleep 3
+          done
+          curl -fsS -H 'Host: payroll.localhost' http://127.0.0.1:8088/api/method/ping
+          "${C[@]}" exec -T web gosu frappe bench --site payroll.localhost execute malaysia_workforce.live_tests.scenarios.run_payroll_fixes | head -c 400
+          echo
+          "${C[@]}" stop
+
+      - name: Save image and digest
+        if: always()
+        run: |
+          set -euo pipefail
+          IMG="ocean6-payroll:pilot-${GITHUB_SHA::7}"
+          if docker image inspect "$IMG" >/dev/null 2>&1; then
+            docker image inspect "$IMG" \
+              --format 'id={{.Id}} arch={{.Os}}/{{.Architecture}} size={{.Size}} created={{.Created}}' \
+              | tee digest.txt
+            docker save "$IMG" | gzip -1 > "payroll-amd64-${GITHUB_SHA::7}.tar.gz"
+            sha256sum "payroll-amd64-${GITHUB_SHA::7}.tar.gz" | tee -a digest.txt
+          else
+            echo "image not built" > digest.txt
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payroll-amd64-${{ github.sha }}
+          path: |
+            digest.txt
+            payroll-amd64-*.tar.gz
+          retention-days: 7
+          if-no-files-found: error
