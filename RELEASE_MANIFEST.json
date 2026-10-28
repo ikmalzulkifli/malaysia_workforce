@@ -21,8 +21,8 @@
     },
     {
       "path": ".github/workflows/amd64-release.yml",
-      "size": 19670,
-      "sha256": "ea6e59258ce1aea1f93f26f4e59b894449989a38347de87156f83ad32c25f6dc"
+      "size": 20472,
+      "sha256": "45d47f8bd9bf40b9b62db1e338153312c2d4ea11da68d8a45e5819ea1bbca746"
     },
     {
       "path": ".github/workflows/ci.yml",
@@ -61,8 +61,8 @@
     },
     {
       "path": "deploy/vps/README.md",
-      "size": 12645,
-      "sha256": "570d179d797f584e1848efcef6bd9e42ba472c91852fe06a6ad29bda318f43ed"
+      "size": 13008,
+      "sha256": "02ac1932b20ff5b99c4c8adad97771c26cd79547a1790a6f88fee67772a33d5c"
     },
     {
       "path": "deploy/vps/backup.sh",

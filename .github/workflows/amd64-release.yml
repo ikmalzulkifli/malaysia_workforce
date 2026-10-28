@@ -193,12 +193,21 @@ jobs:
           # Redis restarted in the previous step; the realtime subscriber does not
           # recover on its own, so restart socketio before asserting delivery.
           "${C[@]}" restart socketio
-          sleep 6
-          curl -sS --cacert /tmp/ca.crt --resolve payroll.localhost:8445:127.0.0.1 \
-            "https://payroll.localhost:8445/socket.io/?EIO=4&transport=polling" \
-            -o /tmp/handshake.json -w 'handshake http=%{http_code}\n'
+          # The node server needs time to boot and resubscribe; a fixed sleep made
+          # this step flaky (502 from the frontend while socketio was starting).
+          CODE=000
+          for _ in $(seq 1 45); do
+            CODE=$(curl -s --cacert /tmp/ca.crt --resolve payroll.localhost:8445:127.0.0.1 \
+              "https://payroll.localhost:8445/socket.io/?EIO=4&transport=polling" \
+              -o /tmp/handshake.json -w '%{http_code}' || echo 000)
+            [ "$CODE" = 200 ] && break
+            echo "handshake http=$CODE, waiting for socketio"
+            sleep 2
+          done
+          echo "handshake http=$CODE"
           head -c 80 /tmp/handshake.json
           echo
+          [ "$CODE" = 200 ]
           python3 -m venv /tmp/sio-venv
           /tmp/sio-venv/bin/pip install -q "python-socketio[client]"
           cat > /tmp/sio_client.py <<'PY'
@@ -327,8 +336,11 @@ jobs:
           RUNTIME="$GITHUB_WORKSPACE/runtime"
           C=(docker compose --env-file "$RUNTIME/payroll.env" -f deploy/vps/compose.yaml -f deploy/vps/compose.local.yaml -p ocean6-payroll-ci)
           docker rm -f payroll-caddy-ci >/dev/null 2>&1 || true
-          "${C[@]}" stop >/dev/null 2>&1 || true
           "${C[@]}" logs --tail=20 web 2>&1 | tail -5 || true
+          # Containers must be gone, not merely stopped, so the digest step can
+          # remove the image and prove the archive round trip.
+          "${C[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
+          docker ps -aq --filter "ancestor=ocean6-payroll:pilot-${GITHUB_SHA::7}" | xargs -r docker rm -f >/dev/null 2>&1 || true
 
       - name: Save image and digest
         if: always()
@@ -344,6 +356,7 @@ jobs:
             # The archive must load back to the same content-addressed identity;
             # architecture and tag alone do not prove that.
             BUILT=$(docker image inspect "$IMG" --format '{{.Id}}')
+            docker ps -aq --filter "ancestor=$IMG" | xargs -r docker rm -f >/dev/null 2>&1 || true
             docker rmi "$IMG" >/dev/null
             gunzip -c "payroll-amd64-${GITHUB_SHA::7}.tar.gz" | docker load
             LOADED=$(docker image inspect "$IMG" --format '{{.Id}}')

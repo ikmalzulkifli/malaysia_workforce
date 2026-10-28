@@ -128,14 +128,19 @@ the artifact, not merely a same-named image:
 
 ```bash
 sha256sum payroll-<commit>-amd64.tar.gz   # must equal the digest.txt line
-docker image inspect ocean6-payroll:pilot-<commit> --format 'id={{.Id}}'
+# Identity anchor: the image config digest saved inside the archive.
+docker save ocean6-payroll:pilot-<commit> | tar -xO manifest.json \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["Config"].split("/")[-1])'
 ```
 
-The `id=` recorded by the build must equal the loaded `.Id`: Docker restores the
-saved image with its content-addressed identity, so a mismatch means the wrong
-archive, a different tag or a modified save. Investigate a mismatch instead of
-accepting a matching tag and architecture. The amd64 workflow enforces the same
-round trip (save → `docker rmi` → load → compare) before it uploads.
+The config digest printed above must equal the `id=` line in `digest.txt`.
+`docker image inspect --format '{{.Id}}'` reports the same value on a classic
+graph-driver engine, but a containerd image store reports the OCI **manifest**
+digest instead (both describe the same image — for example config
+`e8f1cff2…` and manifest `eb359412…` for one verified archive). Compare the
+config digest, never just the tag and architecture, and investigate any
+mismatch before deploying. The amd64 workflow enforces the same round trip
+(save → remove → load → compare) on the build host before it uploads.
 Then set `APP_IMAGE_TAG=pilot-<commit>` in `payroll.env`.
 
 ## Realtime after a Redis restart
