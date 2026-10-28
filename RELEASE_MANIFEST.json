@@ -56,8 +56,8 @@
     },
     {
       "path": "deploy/vps/README.md",
-      "size": 9921,
-      "sha256": "60cd76d6bc79391f2657db7821e877d32218212c0406d164450b4e64c0ef37de"
+      "size": 11532,
+      "sha256": "9a3631bdc7614f85530f44155da7cf3616c0b1e01aa00ed68472f28708f5aac2"
     },
     {
       "path": "deploy/vps/backup.sh",

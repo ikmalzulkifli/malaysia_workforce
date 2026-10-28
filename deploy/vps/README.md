@@ -93,6 +93,40 @@ docker compose -p ocean6-nextcloud --env-file "$NC/runtime.env" -f "$NC/compose.
   exec caddy caddy reload --config /etc/caddy/Caddyfile
 ```
 
+## Native amd64 build (VPS architecture)
+
+The Lightsail instance is `linux/amd64`; a workstation Docker build is usually
+arm64. Do not use QEMU emulation (`uv`/CPython builds fail). Use a native amd64
+host, in this order of preference:
+
+1. **Operator amd64 machine** (existing hardware):
+   `docker build --platform linux/amd64 -f deploy/vps/Dockerfile -t ocean6-payroll:pilot-<commit> .`
+2. **Existing GitHub Actions amd64 runner** (ubuntu-latest is native amd64):
+   requires pushing the commit and approving a workflow run; upload the image as
+   a workflow artifact with `docker save`, not to a registry.
+3. **The Lightsail host itself** (x86_64): only after capacity readings and
+   explicit approval, because the build is CPU/disk heavy and shares the host
+   with Nextcloud. Do not build there while Nextcloud is in use.
+
+Record the artifact:
+
+```bash
+docker image inspect ocean6-payroll:pilot-<commit>   --format 'id={{.Id}} arch={{.Os}}/{{.Architecture}} created={{.Created}}'
+docker save ocean6-payroll:pilot-<commit> | gzip > payroll-<commit>-amd64.tar.gz
+sha256sum payroll-<commit>-amd64.tar.gz
+```
+
+Load on the host with `gunzip -c … | docker load`, confirm
+`docker image inspect --format '{{.Os}}/{{.Architecture}}'` is `linux/amd64`,
+then set `APP_IMAGE_TAG=pilot-<commit>` in `payroll.env`.
+
+## Realtime after a Redis restart
+
+The realtime server's Redis subscriber does not always recover when
+`redis-queue`/`redis-cache` restarts; user-scoped events stop arriving until the
+`socketio` service is restarted. Restart `socketio` after any Redis restart and
+re-run the user-scoped event check.
+
 ## Asset fetching for PDFs
 
 wkhtmltopdf renders print HTML and fetches `/assets/...` from the site URL. The
