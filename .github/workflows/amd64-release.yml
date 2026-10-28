@@ -194,11 +194,20 @@ jobs:
           # recover on its own, so restart socketio before asserting delivery.
           "${C[@]}" restart socketio
           sleep 6
-          grep -q payroll.localhost /etc/hosts || echo "127.0.0.1 payroll.localhost" | sudo tee -a /etc/hosts >/dev/null
+          curl -sS --cacert /tmp/ca.crt --resolve payroll.localhost:8445:127.0.0.1 \
+            "https://payroll.localhost:8445/socket.io/?EIO=4&transport=polling" \
+            -o /tmp/handshake.json -w 'handshake http=%{http_code}\n'
+          head -c 80 /tmp/handshake.json
+          echo
           python3 -m venv /tmp/sio-venv
           /tmp/sio-venv/bin/pip install -q "python-socketio[client]"
           cat > /tmp/sio_client.py <<'PY'
-          import json, sys, time, socketio
+          import json, socket, sys, time, socketio
+          # The CI job has no DNS for the site name; pin resolution inside the client
+          # so TLS SNI and certificate hostname checks still use payroll.localhost.
+          _real = socket.getaddrinfo
+          socket.getaddrinfo = lambda host, port, *a, **k: _real(
+              "127.0.0.1" if host == "payroll.localhost" else host, port, *a, **k)
           cookie, label = sys.argv[1], sys.argv[2]
           ns = "/payroll.localhost"
           client = socketio.Client(ssl_verify="/tmp/ca.crt", reconnection=False)
@@ -213,31 +222,58 @@ jobs:
               client.connect("https://payroll.localhost:8445", headers=headers,
                              namespaces=[ns], transports=["polling"], wait_timeout=15)
           except Exception as exc:
-              print(label, "CONNECT_ERROR", type(exc).__name__, str(exc)[:120])
+              print(label, "CONNECT_ERROR", type(exc).__name__, str(exc)[:300],
+                    "| cause:", repr(exc.__cause__)[:300])
               raise SystemExit(0)
           print(label, "connected", bool(client.sid), flush=True)
-          time.sleep(9)
+          time.sleep(12)
           print(label, "events", json.dumps(seen), flush=True)
           client.disconnect()
           PY
+          wait_connected() {
+            for _ in $(seq 1 40); do
+              grep -q " connected True" "$1" 2>/dev/null && return 0
+              grep -q " CONNECT_ERROR" "$1" 2>/dev/null && { cat "$1"; return 1; }
+              sleep 1
+            done
+            echo "timed out waiting for $1"; cat "$1" 2>/dev/null; return 1
+          }
+          publish() {
+            "${C[@]}" exec -T web gosu frappe bench --site payroll.localhost execute frappe.publish_realtime \
+              --kwargs "{\"event\":\"pilot-amd64\",\"message\":{\"msg\":\"$1\"},\"user\":\"Administrator\"}" >/dev/null
+          }
           ADMIN_SID=$(awk '$6=="sid"{print $7}' /tmp/cj_admin)
           OUT_SID=$(awk '$6=="sid"{print $7}' /tmp/cj_out)
+          # python-socketio's polling transport does not honour ssl_verify as a CA
+          # path; REQUESTS_CA_BUNDLE makes the client validate the Caddy chain.
+          export REQUESTS_CA_BUNDLE=/tmp/ca.crt
+
+          echo "--- phase A: delivery to the signed-in administrator"
           /tmp/sio-venv/bin/python /tmp/sio_client.py "$ADMIN_SID" admin > /tmp/rt_admin.txt 2>&1 &
-          /tmp/sio-venv/bin/python /tmp/sio_client.py "$OUT_SID" outsider > /tmp/rt_outsider.txt 2>&1 &
-          /tmp/sio-venv/bin/python /tmp/sio_client.py - guest > /tmp/rt_guest.txt 2>&1 &
-          sleep 5
-          "${C[@]}" exec -T web gosu frappe bench --site payroll.localhost execute frappe.publish_realtime \
-            --kwargs '{"event":"pilot-amd64","message":{"msg":"one"},"user":"Administrator"}' >/dev/null
-          sleep 1
-          "${C[@]}" exec -T web gosu frappe bench --site payroll.localhost execute frappe.publish_realtime \
-            --kwargs '{"event":"pilot-amd64","message":{"msg":"two"},"user":"Administrator"}' >/dev/null
-          wait
-          cat /tmp/rt_admin.txt /tmp/rt_outsider.txt /tmp/rt_guest.txt
-          grep -q 'admin connected True' /tmp/rt_admin.txt
+          ADMIN_PID=$!
+          wait_connected /tmp/rt_admin.txt
+          publish one
+          sleep 2
+          publish two
+          wait "$ADMIN_PID"
+          cat /tmp/rt_admin.txt
           grep -q 'admin events \[\["pilot-amd64"' /tmp/rt_admin.txt
+          grep -q '"one"' /tmp/rt_admin.txt
           grep -q '"two"' /tmp/rt_admin.txt
+
+          echo "--- phase B: no delivery to an unrelated employee"
+          /tmp/sio-venv/bin/python /tmp/sio_client.py "$OUT_SID" outsider > /tmp/rt_outsider.txt 2>&1 &
+          OUT_PID=$!
+          wait_connected /tmp/rt_outsider.txt
+          publish scope
+          wait "$OUT_PID"
+          cat /tmp/rt_outsider.txt
           grep -q 'outsider connected True' /tmp/rt_outsider.txt
           grep -q 'outsider events \[\]' /tmp/rt_outsider.txt
+
+          echo "--- phase C: guest rejected at namespace auth"
+          /tmp/sio-venv/bin/python /tmp/sio_client.py - guest > /tmp/rt_guest.txt 2>&1 || true
+          cat /tmp/rt_guest.txt
           grep -q 'guest CONNECT_ERROR' /tmp/rt_guest.txt
 
       - name: "Acceptance 6: scratch restore"
