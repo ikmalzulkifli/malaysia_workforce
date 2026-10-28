@@ -1,0 +1,203 @@
+name: ocean6-payroll
+
+x-app: &app
+  build:
+    context: ../..
+    dockerfile: deploy/vps/Dockerfile
+  image: ocean6-payroll:${APP_IMAGE_TAG:-pilot}
+  env_file:
+    - ${RUNTIME_DIR:?RUNTIME_DIR is required}/payroll.env
+  init: true
+  networks:
+    - payroll_internal
+  volumes:
+    - payroll_sites:/home/frappe/frappe-bench/sites
+  logging: &logging
+    driver: json-file
+    options: {max-size: 10m, max-file: "5"}
+
+services:
+  db:
+    image: mariadb:11.4.13
+    restart: unless-stopped
+    command:
+      - --transaction-isolation=READ-COMMITTED
+      - --binlog-format=ROW
+      - --innodb-buffer-pool-size=256M
+      - --performance-schema=OFF
+      - --max-connections=50
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?}
+      MARIADB_DATABASE: payroll
+      MARIADB_USER: payroll
+      MARIADB_PASSWORD: ${DB_PASSWORD:?}
+    volumes:
+      - payroll_db:/var/lib/mysql
+    networks: [payroll_internal]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    logging: *logging
+
+  redis-cache:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_CACHE_PASSWORD:?}
+      - --maxmemory
+      - 128mb
+      - --maxmemory-policy
+      - allkeys-lru
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+    environment:
+      REDIS_CACHE_PASSWORD: ${REDIS_CACHE_PASSWORD}
+    networks: [payroll_internal]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_CACHE_PASSWORD\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    logging: *logging
+
+  redis-queue:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_QUEUE_PASSWORD:?}
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - noeviction
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+    environment:
+      REDIS_QUEUE_PASSWORD: ${REDIS_QUEUE_PASSWORD}
+    volumes:
+      - payroll_redis_queue:/data
+    networks: [payroll_internal]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_QUEUE_PASSWORD\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    logging: *logging
+
+  web:
+    <<: *app
+    restart: unless-stopped
+    environment:
+      ROLE: web
+    depends_on:
+      db: {condition: service_healthy}
+      redis-cache: {condition: service_healthy}
+      redis-queue: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -H \"Host: $$SITE_NAME\" http://127.0.0.1:8000/api/method/ping >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  worker:
+    <<: *app
+    restart: unless-stopped
+    environment:
+      ROLE: worker
+    depends_on:
+      db: {condition: service_healthy}
+      redis-cache: {condition: service_healthy}
+      redis-queue: {condition: service_healthy}
+
+  scheduler:
+    <<: *app
+    restart: unless-stopped
+    environment:
+      ROLE: scheduler
+    depends_on:
+      db: {condition: service_healthy}
+      redis-cache: {condition: service_healthy}
+      redis-queue: {condition: service_healthy}
+
+  socketio:
+    <<: *app
+    restart: unless-stopped
+    environment:
+      ROLE: socketio
+    depends_on:
+      db: {condition: service_healthy}
+      redis-cache: {condition: service_healthy}
+      redis-queue: {condition: service_healthy}
+
+  frontend:
+    <<: *app
+    container_name: ocean6-payroll-frontend
+    restart: unless-stopped
+    environment:
+      ROLE: frontend
+    volumes:
+      - payroll_sites:/home/frappe/frappe-bench/sites:ro
+    networks:
+      - payroll_internal
+      - ingress
+    depends_on:
+      web: {condition: service_started}
+      socketio: {condition: service_started}
+
+  setup:
+    <<: *app
+    profiles: ["tools"]
+    restart: "no"
+    environment:
+      ROLE: setup
+    depends_on:
+      db: {condition: service_healthy}
+      redis-cache: {condition: service_healthy}
+      redis-queue: {condition: service_healthy}
+
+  backup:
+    <<: *app
+    profiles: ["tools"]
+    restart: "no"
+    environment:
+      ROLE: backup
+    volumes:
+      - payroll_sites:/home/frappe/frappe-bench/sites:ro
+      - ${BACKUP_DIR:?BACKUP_DIR is required}:/backup
+    depends_on:
+      db: {condition: service_healthy}
+
+  restore:
+    <<: *app
+    profiles: ["tools"]
+    restart: "no"
+    environment:
+      ROLE: restore
+    volumes:
+      - payroll_sites:/home/frappe/frappe-bench/sites:ro
+      - ${BACKUP_DIR:?BACKUP_DIR is required}:/backup
+    depends_on:
+      db: {condition: service_healthy}
+
+networks:
+  payroll_internal:
+    ipam:
+      config:
+        - subnet: 172.30.61.0/24
+  ingress:
+    external: true
+    name: ${INGRESS_NETWORK:-ocean6-nextcloud_default}
+
+volumes:
+  payroll_db: {}
+  payroll_redis_queue: {}
+  payroll_sites: {}

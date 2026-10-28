@@ -1,0 +1,13 @@
+# Append to /opt/ocean6-nextcloud/runtime/Caddyfile, then reload Caddy.
+# Replace __PILOT_ALLOW_CIDR__ with the VERIFIED current operator IP/CIDR
+# (check with `curl -s https://ifconfig.me` from the operator machine).
+payroll.theocean6.com {
+    header Strict-Transport-Security "max-age=15552000"
+    @pilot remote_ip __PILOT_ALLOW_CIDR__
+    handle @pilot {
+        reverse_proxy ocean6-payroll-frontend:8080
+    }
+    handle {
+        respond "Not available" 403
+    }
+}

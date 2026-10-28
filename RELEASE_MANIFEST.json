@@ -2,7 +2,7 @@
   "app": "malaysia_workforce",
   "version": "1.0.0-rc.14",
   "generated_on": "2026-10-28",
-  "file_count": 145,
+  "file_count": 158,
   "files": [
     {
       "path": ".editorconfig",
@@ -38,6 +38,71 @@
       "path": "compatibility-lock.json",
       "size": 1037,
       "sha256": "485247be19fdab8124517e6010da782a714df2d968cc8cbeaf9ea77e44490996"
+    },
+    {
+      "path": "deploy/vps/Caddyfile.payroll",
+      "size": 474,
+      "sha256": "5b9a06cd71c576ef47fd78fd63749da99d7743d50ef1ad8d5c7fbeeb8f74cb57"
+    },
+    {
+      "path": "deploy/vps/Dockerfile",
+      "size": 3061,
+      "sha256": "23820e09c3723f615bfdea0cdcc81ac0db73cd0fd5841b0158a22e1e0f99288c"
+    },
+    {
+      "path": "deploy/vps/README.md",
+      "size": 8605,
+      "sha256": "5a45cd2d015d7b6d6bf836f7b7a773ca023d94048235dc323d9f94c3fc271787"
+    },
+    {
+      "path": "deploy/vps/backup.sh",
+      "size": 876,
+      "sha256": "0854f2b0162a687771c1e167570f29624bf7dc8044b30cfdc0a57a0089478d4c"
+    },
+    {
+      "path": "deploy/vps/common_site_config.json.template",
+      "size": 347,
+      "sha256": "010bf5c9f7c3a3640be6dbf34731470e5b9eba3ab622d2b7c99ce3a294d699fa"
+    },
+    {
+      "path": "deploy/vps/compose.local.yaml",
+      "size": 704,
+      "sha256": "9245b344fdb08d6208eddd3dc66a22e70295769c4d0b2063970ba09b7fe87296"
+    },
+    {
+      "path": "deploy/vps/compose.yaml",
+      "size": 4878,
+      "sha256": "672b282635b2ac271232efc2a00eaad78c16ac528ae9fd7a1450bdb8d09c82bc"
+    },
+    {
+      "path": "deploy/vps/entrypoint.sh",
+      "size": 2656,
+      "sha256": "d08d01e7d9a47b4c4d43b4b3ad3a18e17c7cdf4fcdf08dd47cbfb9fd252abb24"
+    },
+    {
+      "path": "deploy/vps/frontend/default.conf.template",
+      "size": 2342,
+      "sha256": "2c59fc0d0ae945dfadac63de35e052a8ef30a5072b6677c69465fef58fd3354a"
+    },
+    {
+      "path": "deploy/vps/frontend/entrypoint.sh",
+      "size": 232,
+      "sha256": "6207390d39a3f73cf06e732193506024c1863d200a53da5567041877a391a799"
+    },
+    {
+      "path": "deploy/vps/payroll.env.example",
+      "size": 497,
+      "sha256": "6c6963c37a1ef49f20b0adcc02dddffe8e5b969e5ef10b67d0454aa3b5c42ba1"
+    },
+    {
+      "path": "deploy/vps/restore.sh",
+      "size": 1000,
+      "sha256": "dccbad78f625592492a54340f3a39fac3e1b2d16fa4e643a0f7eac41163bd1b6"
+    },
+    {
+      "path": "deploy/vps/setup.sh",
+      "size": 1176,
+      "sha256": "94bc0d091f51b7228ae2eb785c9a0968d33e2a86729f340afd4f0077af2691ae"
     },
     {
       "path": "docs/API.md",

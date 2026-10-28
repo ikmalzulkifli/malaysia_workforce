@@ -1,0 +1,23 @@
+# Local validation only. Publishes the frontend on loopback and uses a local
+# ingress network instead of the Nextcloud Caddy network.
+services:
+  frontend:
+    ports:
+      - "127.0.0.1:8088:8080"
+  # Local workstation cache only; the committed compose pins the reviewed tags.
+  db:
+    image: mariadb:11.4
+  redis-cache:
+    image: redis:7
+  redis-queue:
+    image: redis:7
+networks:
+  # This workstation already has other projects on 172.30.0.0/16; the committed
+  # compose keeps 172.30.61.0/24 for the VPS where 172.30.60.0/24 is Nextcloud.
+  payroll_internal:
+    ipam:
+      config:
+        - subnet: 10.42.61.0/24
+  ingress:
+    external: true
+    name: ${INGRESS_NETWORK:-payroll-local-ingress}
