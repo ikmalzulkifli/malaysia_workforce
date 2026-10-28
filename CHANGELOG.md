@@ -8,6 +8,8 @@
 - TP1 C11 is split into C11A (voluntary EPF, RM4,000 including compulsory EPF) and C11B (life insurance/takaful or additional voluntary EPF, RM3,000). C11A relief is limited to the unused part of the RM4,000 EPF sublimit after the EPF relief already counted in P; C11B is independent. A lump-sum C11 claim is rejected at declaration save and at payroll, requiring explicit itemisation rather than an apportionment guess.
 - Payroll Readiness, Payroll Entry submission and the readiness report now name any of the six managed Salary Components that has no account for the company, instead of failing later in the accrual journal.
 - PCB helpers no longer import Frappe at module scope, so the pure test suite runs without a bench (the CI `pytest -q` job previously failed on this).
+- Ambiguous legacy history now blocks payroll itself, not only filing preparation. When a month already contains two or more slips from an earlier build (cumulative wage bases, no per-slip marker), Salary Slip calculation and submission stop with a message naming the slips and scheme. Previously a new RM2,000 slip added to two old RM2,000 slips calculated on RM8,000 and over-levied HRD Corp. Single-slip legacy months remain usable.
+- Zakat now offsets additional-remuneration MTD exactly as HASiL's 2026 worked table requires (section E.5(ii)). Zakat is absorbed by the normal MTD actually payable after the RM10 floor; any remainder reduces the additional MTD instead of being over-withheld. The prior and current zakat test case now pays RM700.10 rather than RM727.20 for the same inputs.
 
 ## 1.0.0-rc.14 — 2026-08-20
 

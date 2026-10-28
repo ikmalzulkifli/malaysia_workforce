@@ -18,6 +18,23 @@ The app never guesses how to merge legally relied-upon payroll records.
 
 After the preflight passes, schema sync removes obsolete DocTypes and the app removes only its known legacy Custom Fields. It preserves unrelated administrator customization. Reserved Malaysia Salary Components keep administrator account/formula configuration while their app-owned statutory metadata is refreshed.
 
+## From 1.0.0-rc.14 (per-slip wage bases and C11)
+
+`Malaysia Statutory Result` gains `slip_wages` and `per_slip_wages_recorded`, and TP1 C11 becomes C11A/C11B.
+
+Salary Slips submitted by rc.14 and earlier store only the cumulative monthly wage base for SOCSO, EIS and HRD Corp. A month with a single slip is still exact. A month with **two or more** slips cannot be reconstructed without guessing, so payroll now stops at calculation and submission with a message naming the affected slips and scheme. It is not enough to leave those periods unfiled: filing them under the old build would export the known overstated wage base.
+
+Correct them deliberately, with review:
+
+1. Identify affected employees from the error message (or from `Malaysia Statutory Result` rows with `per_slip_wages_recorded` unset where more than one slip shares the month and scheme).
+2. Recomputed contributions may differ from what was deducted. Decide the employee/employer correction with your accountant before amending or issuing a payroll correction.
+3. Amend the affected slips through the standard cancel/amend process so the current build recalculates and stamps `slip_wages`. Do not edit `wage_base`, `slip_wages` or `per_slip_wages_recorded` by hand.
+4. Re-prepare any draft filing after the slips are corrected. Submitted or reconciled filings keep their recorded totals and must be corrected through the authority's own amendment process.
+
+TP1 rows saved with the old lump-sum `C11` must be amended into `C11A` (voluntary EPF, RM4,000 including compulsory EPF) and `C11B` (life insurance/takaful or additional voluntary EPF, RM3,000). Payroll refuses to run with a legacy row rather than allocating it.
+
+No submitted payroll or statutory result is rewritten by the upgrade.
+
 ## From 1.0.0-rc.8
 
 This release corrects LINDUNG 24 Jam from an opt-in election to an opt-out scheme. A migration sets every employee whose participation is blank or `Not Set` to `Participating`, and clears the effective date and evidence on participating employees. Only the field values are cleared; the attached File records remain on the Employee.

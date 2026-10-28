@@ -6,9 +6,28 @@ database readers in payroll.salary_slip call into this module.
 
 from __future__ import annotations
 
+from collections import Counter
 from decimal import Decimal
 
 from malaysia_workforce.statutory.common import ZERO, decimal
+
+SAME_MONTH_BASE_SCHEMES = {"SOCSO", "EIS", "HRD Corp"}
+
+
+class AmbiguousLegacyHistory(ValueError):
+	"""Raised when same-month wage bases cannot be reconstructed without guessing.
+
+	Rows written before the per-slip wage fix store only the cumulative month base.
+	Summing two of them double counts the month, so calculation stops instead.
+	"""
+
+	def __init__(self, schemes: list[str], parents: list[str]):
+		self.schemes = tuple(sorted(schemes))
+		self.parents = tuple(sorted(parents))
+		super().__init__(
+			f"{', '.join(self.schemes)} wage bases for {', '.join(self.parents)} were stored by an "
+			"earlier build as cumulative monthly totals and cannot be summed"
+		)
 
 
 def slip_wages(row) -> Decimal:
@@ -40,6 +59,27 @@ def accumulate(context: dict, rows, *, end_dates: dict, month_start) -> dict:
 	calculation. It must never be summed across same-month slips; ``slip_wages`` is the
 	per-slip contribution to the month and is what these totals use.
 	"""
+	same_month = [row for row in rows if end_dates[row.parent] >= month_start]
+	counts = Counter(row.scheme for row in same_month)
+	legacy_parents: dict[str, list[str]] = {}
+	for row in same_month:
+		if row.scheme in SAME_MONTH_BASE_SCHEMES and not row.get("per_slip_wages_recorded"):
+			legacy_parents.setdefault(row.scheme, []).append(row.parent)
+	ambiguous = sorted(
+		scheme
+		for scheme, parents in legacy_parents.items()
+		if counts[scheme] > 1
+		and any(
+			decimal(row.wage_base) > 0
+			for row in same_month
+			if row.scheme == scheme and not row.get("per_slip_wages_recorded")
+		)
+	)
+	if ambiguous:
+		raise AmbiguousLegacyHistory(
+			ambiguous, sorted({parent for scheme in ambiguous for parent in legacy_parents[scheme]})
+		)
+
 	for row in rows:
 		if end_dates[row.parent] < month_start:
 			if row.scheme == "PCB":
@@ -53,7 +93,7 @@ def accumulate(context: dict, rows, *, end_dates: dict, month_start) -> dict:
 		if row.scheme == "EPF":
 			context["same"]["epf_regular"] += decimal(row.regular_wages)
 			context["same"]["epf_additional"] += decimal(row.additional_wages)
-		elif row.scheme in {"SOCSO", "EIS", "HRD Corp"}:
+		elif row.scheme in SAME_MONTH_BASE_SCHEMES:
 			context["same"][row.scheme.lower().replace(" corp", "")] += slip_wages(row)
 		elif row.scheme == "PCB":
 			context["same"]["pcb_regular"] += decimal(row.regular_wages)

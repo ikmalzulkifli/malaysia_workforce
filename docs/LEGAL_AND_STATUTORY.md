@@ -7,6 +7,7 @@
 - EIS contribution schedule and eligibility switch.
 - LHDN resident PCB with regular/additional remuneration, TP1, TP3, zakat rebate and CP38. The 2026 computerised MTD formula, B values and text-file layout were checked against HASiL's "Spesifikasi Kaedah Pengiraan Berkomputer PCB 2026" (updated 1 January 2026).
 - TP1 C11 split into the two s.49(1)/(1A) sublimits: C11A voluntary EPF (RM4,000 including compulsory EPF already relieved by the formula) and C11B life insurance/takaful or additional voluntary EPF (RM3,000), total RM7,000.
+- Zakat deducted through payroll is absorbed by the month's normal MTD first. Any remainder offsets the additional-remuneration MTD in the same month, following the worked table in section E.5(ii) of the HASiL 2026 specification (8 -> 0 with zakat 5 and additional 25 gives 20; 15 with zakat 20 and additional 32.55 gives 27.55).
 - HRD Corp 1% or 0.5% levy according to configured registration class, with the compulsory class enforced from ten Malaysian employees.
 - Minimum Wage Order effective dates.
 - Full-time ordinary hourly rate, normal overtime, rest-day, public-holiday, incomplete-month and termination-benefit primitives.

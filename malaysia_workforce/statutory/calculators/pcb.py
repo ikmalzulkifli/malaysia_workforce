@@ -4,7 +4,7 @@ from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 
-from malaysia_workforce.statutory.common import PCBInput, PCBResult, ZERO, decimal, round_up_5_sen, truncate
+from malaysia_workforce.statutory.common import PCBInput, PCBResult, ZERO, decimal, money, round_up_5_sen, truncate
 
 RULE_VERSION = "LHDN-MTD-2026-2026-01-01"
 INDIVIDUAL_RELIEF = Decimal("9000")
@@ -112,6 +112,23 @@ def _annual_projection(args: PCBInput, *, include_additional: bool) -> tuple[Dec
 	return truncate(max(p, ZERO)), truncate(epf_relief)
 
 
+def _zakat_offset(normal_before_zakat, additional_mtd, current_zakat) -> tuple[Decimal, Decimal]:
+	"""Apply the current month's zakat exactly as HASiL's worked table does.
+
+	Zakat is absorbed by the MTD actually payable for the month (the amount after the
+	RM10 floor). Any remainder reduces the additional-remuneration MTD; it is not lost
+	and not applied twice. Returns (offset applied to additional MTD, additional payable).
+
+	HASiL 2026 specification, section E.5(ii): normal MTD 8 -> 0, zakat 5, additional
+	25 -> 20; normal MTD 15, zakat 20, additional 32.55 -> 27.55.
+	"""
+	zakat = max(decimal(current_zakat), ZERO)
+	absorbed = min(zakat, max(decimal(normal_before_zakat), ZERO))
+	excess = max(zakat - absorbed, ZERO)
+	offset = min(excess, max(decimal(additional_mtd), ZERO))
+	return money(offset), money(max(decimal(additional_mtd) - offset, ZERO))
+
+
 def _normal_mtd(args: PCBInput, chargeable: Decimal) -> tuple[Decimal, Decimal]:
 	n_plus_one = Decimal(13 - int(args.month))
 	annual_tax = _band_tax(chargeable, args.category, args.tax_regime)
@@ -175,12 +192,25 @@ def calculate_pcb(args: PCBInput) -> PCBResult:
 		)
 		additional_mtd = ZERO if raw_additional < Decimal("10") else round_up_5_sen(raw_additional)
 
-	payable = round_up_5_sen(normal_after_zakat + additional_mtd)
+	zakat_offset_additional, additional_payable = _zakat_offset(
+		normal_before_zakat, additional_mtd, args.current_zakat
+	)
+	payable = round_up_5_sen(normal_after_zakat + additional_payable)
+	explanation = [
+		"LHDN computerized MTD formula for normal remuneration",
+		"Additional remuneration formula applied when current additional remuneration is positive",
+		"Intermediate calculations truncated to two decimals; final MTD rounded up to five sen",
+	]
+	if zakat_offset_additional:
+		explanation.append(
+			f"Zakat not absorbed by this month's MTD offset the additional remuneration MTD by {zakat_offset_additional}"
+		)
 	return PCBResult(
 		payable=payable,
 		normal_mtd_before_zakat=normal_before_zakat,
 		normal_mtd_after_zakat=normal_after_zakat,
 		additional_mtd=additional_mtd,
+		zakat_offset_additional=zakat_offset_additional,
 		chargeable_income_normal=chargeable_normal,
 		chargeable_income_with_additional=chargeable_with_additional,
 		annual_tax_normal=annual_tax_normal,

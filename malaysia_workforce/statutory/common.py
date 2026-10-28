@@ -121,6 +121,7 @@ class PCBResult:
 	category: int
 	rule_version: str = "LHDN-MTD-2026-2026-01-01"
 	explanation: tuple[str, ...] = field(default_factory=tuple)
+	zakat_offset_additional: Decimal = ZERO
 
 	def to_dict(self) -> dict[str, Any]:
 		result = asdict(self)

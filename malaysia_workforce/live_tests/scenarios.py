@@ -1763,6 +1763,50 @@ def run_payroll_fixes(*, commit: bool = True) -> dict:
 	_fix_check(results, "E PCB in claim month", _fix_deduction(slip_e_feb, "PCB"), "93.65")
 	_fix_check(results, "E PCB after claim month", _fix_deduction(slip_e_mar, "PCB"), "93.65")
 
+	# 7b. C11 combined with a bonus and a previous employer's EPF. The RM4,000 EPF
+	#     sublimit is already filled by RM1,100 (TP3) + RM550 (January) + RM220 (bonus
+	#     EPF) + RM2,130 projected, so C11A adds nothing and only C11B applies.
+	emp_h = _fix_employee("H", 5000)
+	_fix_assign(emp_h, _fix_structure("MW Fix H", 5000), 5000)
+	tp3_evidence = _private_file("mw-fix-tp3-evidence.txt", "Synthetic TP3 evidence")
+	tp3 = frappe.get_doc({
+		"doctype": "Malaysia Previous Employment TP3", "employee": emp_h, "company": COMPANY,
+		"tax_year": 2026, "previous_employer_name": "Previous Employer Sdn Bhd",
+		"employment_start": "2026-01-01", "employment_end": "2026-01-20",
+		"gross_normal_remuneration": 10000, "epf_contribution": 1100, "mtd_paid": 0,
+		"zakat_paid": 0, "optional_reliefs": 0, "evidence": tp3_evidence,
+		"employee_declaration": 1,
+	}).insert(ignore_permissions=True)
+	tp1_h = frappe.get_doc({
+		"doctype": "Malaysia Tax Declaration TP1", "employee": emp_h, "company": COMPANY,
+		"tax_year": 2026, "declaration_date": "2026-02-01", "employee_declaration": 1,
+		"relief_claims": [
+			{"relief_code": "C11A", "amount": 4000, "claim_month": 2, "evidence_reference": receipt},
+			{"relief_code": "C11B", "amount": 3000, "claim_month": 2, "evidence_reference": receipt},
+		],
+	}).insert(ignore_permissions=True)
+	frappe.set_user(HR_MANAGER)
+	tp3.submit()
+	tp1_h.submit()
+	frappe.set_user("Administrator")
+	slip_h_jan = _fix_slip(emp_h, "MW Fix H", date(2026, 1, 1), date(2026, 1, 31))
+	bonus_h = frappe.get_doc({
+		"doctype": "Additional Salary", "employee": emp_h, "company": COMPANY,
+		"salary_component": "MW Lean Bonus", "amount": 2000, "payroll_date": date(2026, 2, 15),
+	}).insert(ignore_permissions=True)
+	bonus_h.submit()
+	slip_h_feb = _fix_slip(emp_h, "MW Fix H", date(2026, 2, 1), date(2026, 2, 28))
+	# January: P = (10,000 - 1,100) + (5,000 - 550) + (5,000 - 213.63) x 11 - 9,000
+	# = 57,000.07; tax 2,270.00; MTD 2,270/12 = 189.17 rounded up to five sen = 189.20.
+	_fix_check(results, "H PCB before C11 and with TP3", _fix_deduction(slip_h_jan, "PCB"), "189.20")
+	# February adds the RM2,000 bonus in the same slip: P2 56,000, EPF relief 4,000, so
+	# C11A adds nothing and C11B adds 3,000. P1 54,000; normal MTD 159.20; additional
+	# 2,160.00 - (189.20 + 159.20 x 11) = 219.60; total 378.80.
+	_fix_check(results, "H PCB with C11A capped and C11B applied", _fix_deduction(slip_h_feb, "PCB"), "378.80")
+	_fix_check(results, "H bonus additional wages", _fix_result(slip_h_feb, "PCB").additional_wages, "2000.00")
+	# One February slip with the bonus inside it, so the month's EPF is 11% of 7,000.
+	_fix_check(results, "H bonus month EPF employee", _fix_result(slip_h_feb, "EPF").employee_amount, "770.00")
+
 	# 8. Draft-to-submit: a tax-setting change after the draft must be reflected.
 	emp_f = _fix_employee("F", 5000)
 	_fix_assign(emp_f, _fix_structure("MW Fix F", 5000), 5000)
@@ -1774,6 +1818,27 @@ def run_payroll_fixes(*, commit: bool = True) -> dict:
 	draft.reload()
 	_fix_check(results, "F submitted PCB after child-unit change", _fix_deduction(draft, "PCB"), "100.00")
 	_fix_check(results, "F submitted PCB result", _fix_result(draft, "PCB").employee_amount, "100.00")
+
+	# 8b. Ambiguous legacy history blocks a new slip before the wage base is compounded.
+	#     The two older slips are rewritten to look like rows from the previous build:
+	#     cumulative wage bases without the per-slip marker.
+	emp_i = _fix_employee("I", 2000)
+	_fix_assign(emp_i, _fix_structure("MW Fix I", 2000), 2000)
+	legacy_1 = _fix_slip(emp_i, "MW Fix I", date(2026, 11, 1), date(2026, 11, 10))
+	legacy_2 = _fix_slip(emp_i, "MW Fix I", date(2026, 11, 11), date(2026, 11, 20))
+	for row_name in frappe.get_all(
+		"Malaysia Statutory Result",
+		filters={"parent": ["in", [legacy_1.name, legacy_2.name]], "parenttype": "Salary Slip",
+			"scheme": ["in", ["SOCSO", "EIS", "HRD Corp"]]},
+		pluck="name",
+	):
+		frappe.db.set_value("Malaysia Statutory Result", row_name, "per_slip_wages_recorded", 0)
+	legacy_blocked = False
+	try:
+		_fix_slip(emp_i, "MW Fix I", date(2026, 11, 21), date(2026, 11, 30))
+	except frappe.ValidationError as exc:
+		legacy_blocked = "earlier build" in str(exc)
+	_fix_check(results, "Legacy same-month rows block a new slip", legacy_blocked, True)
 
 	# 9. Missing Salary Component accounts are reported before payroll, naming both the
 	#    component and the company (previously only the accrual journal failed).

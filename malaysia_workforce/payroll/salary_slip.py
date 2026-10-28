@@ -7,7 +7,7 @@ import frappe
 from frappe import _
 from frappe.utils import get_first_day, getdate
 
-from malaysia_workforce.payroll.accumulation import accumulate, empty_context, slip_wages
+from malaysia_workforce.payroll.accumulation import AmbiguousLegacyHistory, accumulate, empty_context
 from malaysia_workforce.payroll.profile import (
 	SOCSO_EIS_PROFILE_RULE_VERSION,
 	SOCSO_EIS_LINDUNG_PROFILE,
@@ -133,7 +133,16 @@ def _prior_results(doc) -> dict:
 		fields=["parent", "scheme", "wage_base", "slip_wages", "per_slip_wages_recorded", "regular_wages", "additional_wages",
 			"employee_amount", "employer_amount", "extra_employee_amount"],
 	)
-	return accumulate(context, rows, end_dates=end_dates, month_start=month_start)
+	try:
+		return accumulate(context, rows, end_dates=end_dates, month_start=month_start)
+	except AmbiguousLegacyHistory as exc:
+		frappe.throw(
+			_(
+				"Salary Slips {0} for {1} were calculated by an earlier build that stored only the cumulative monthly wage base. "
+				"{2} contributions for this month cannot be calculated without overstating the month's wages. Amend those slips "
+				"so they are recalculated before running payroll."
+			).format(", ".join(exc.parents), doc.employee, ", ".join(exc.schemes))
+		)
 
 
 def _relief_bucket(out: dict, *, code: str, amount: Decimal, claim_month: int, month: int, declaration: str) -> None:
