@@ -3,6 +3,7 @@
 ## Unreleased
 
 - CP39 header now writes independent "Total MTD Records" and "Total CP38 Records" counts (Exhibit 4 fields 7 and 9) instead of the same number in both. An MTD-only employee no longer produces a CP38 count of one. Detail lines, including zero/zero employees, are unchanged pending HASiL confirmation on whether such lines should be omitted.
+- Validated the bonus-only second-slip route end to end: a separate zero-basic Salary Structure with its own assignment (carrying the contract wage) produces a slip with only the Additional Salary bonus, and the month's PCB matches the single-slip case (RM24.60). A zero assignment base is rejected by the minimum-wage gate, so off-cycle bonus runs must keep the contract wage on the assignment.
 - The zakat-offset explanation is no longer discarded: `calculate_pcb()` returns the constructed explanation, so the saved Salary Slip statutory result records why additional-remuneration MTD was reduced.
 
 - Salary Slip statutory deductions are now authoritative. The app no longer calls `calculate_net_pay()` after writing its rows (which let Salary Structure components with the same name overwrite the statutory amount) and no longer skips calculation at submission. Managed rows are rewritten on every save and again at submit, then totals and net pay are recomputed once. A Salary Structure that contains EPF Employee, SOCSO Employee, SKBBK Employee, EIS Employee, PCB or CP38 can no longer change the payslip amount.

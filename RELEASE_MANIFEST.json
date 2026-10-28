@@ -26,8 +26,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "size": 19884,
-      "sha256": "14c2570f945df6734140a90896374bfed69287757e5f8d0133f4126340a1c560"
+      "size": 20280,
+      "sha256": "41c0de9cc47670ce4b557c083049b2ef72b9288b206766d69f18245c263e273c"
     },
     {
       "path": "README.md",
@@ -71,8 +71,8 @@
     },
     {
       "path": "docs/OPERATIONS.md",
-      "size": 2708,
-      "sha256": "1104e981f890f9133f3b81efcf66ef9a7045641fbe905466888428e6ab224953"
+      "size": 3018,
+      "sha256": "3d1654b9429ffe6d9ff4d6817a9598f73c9da56d503107ddf1e691ec4a230ee8"
     },
     {
       "path": "docs/RELEASE_VALIDATION.md",
@@ -136,8 +136,8 @@
     },
     {
       "path": "malaysia_workforce/live_tests/scenarios.py",
-      "size": 87971,
-      "sha256": "29e543feb9032349faa09ba34ea99b2db8f3d4f051cc3b3cfdf3c29464144dfa"
+      "size": 90682,
+      "sha256": "13a449ac6fb1ae34342a33773b9cae653cd04522e3ba8c3db22c01832ba7ff61"
     },
     {
       "path": "malaysia_workforce/malaysia_workforce/__init__.py",

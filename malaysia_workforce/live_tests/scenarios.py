@@ -1555,11 +1555,11 @@ def _fix_structure(name: str, base: int, *, managed_deduction: tuple[str, int] |
 	return name
 
 
-def _fix_assign(employee: str, structure: str, base: int) -> None:
+def _fix_assign(employee: str, structure: str, base: int, *, from_date: str = "2026-01-01") -> None:
 	payable, _expense = _accounts()
 	assignment = frappe.get_doc({
 		"doctype": "Salary Structure Assignment", "employee": employee, "salary_structure": structure,
-		"company": COMPANY, "from_date": "2026-01-01", "base": base, "currency": "MYR",
+		"company": COMPANY, "from_date": from_date, "base": base, "currency": "MYR",
 		"payroll_payable_account": payable,
 	}).insert(ignore_permissions=True)
 	assignment.submit()
@@ -1872,8 +1872,9 @@ def run_payroll_fixes(*, commit: bool = True) -> dict:
 		any("Zakat not absorbed" in (row.explanation or "") for row in draft_j.custom_malaysia_statutory_results),
 		"True")
 
-	# 8d. The same month through a second slip: zakat on the first half-month slip, the
-	#     bonus on the second, still exactly one cash zakat and one month PCB.
+	# 8d. Split-salary variant: two half-month slips that each pay the monthly base, with
+	#     zakat on the first and the bonus on the second. This is NOT the bonus-only
+	#     route (see 8d-2); it checks month aggregation when normal pay itself is split.
 	emp_k = _fix_employee("K", 3700)
 	_fix_assign(emp_k, _fix_structure("MW Fix K", 3700), 3700)
 	zakat_k = frappe.get_doc({
@@ -1902,11 +1903,51 @@ def run_payroll_fixes(*, commit: bool = True) -> dict:
 	_fix_check(results, "K month PCB total",
 		_fix_result(slip_ka, "PCB").employee_amount + _fix_result(slip_kb, "PCB").employee_amount, "584.85")
 
+	# 8d-2. Bonus-only second slip: the same low-PCB month where the second slip carries
+	#       no normal remuneration, only the RM1,000 bonus. Month totals must match the
+	#       single-slip J case (RM24.60), proving the route does not depend on splitting
+	#       the salary base.
+	emp_l = _fix_employee("L", 3700)
+	_fix_assign(emp_l, _fix_structure("MW Fix L", 3700), 3700)
+	zakat_l = frappe.get_doc({
+		"doctype": "Additional Salary", "employee": emp_l, "company": COMPANY,
+		"salary_component": "Zakat", "amount": 5, "payroll_date": date(2026, 1, 10),
+	}).insert(ignore_permissions=True)
+	zakat_l.submit()
+	slip_l_normal = _fix_slip(emp_l, "MW Fix L", date(2026, 1, 1), date(2026, 1, 31))
+	# A zero-earning structure plus its own assignment lets the second slip carry only
+	# the Additional Salary bonus; the normal slip keeps the salary structure.
+	_fix_structure("MW Fix L Bonus Only", 0)
+	# The assignment keeps the contract wage for the minimum-wage gate; the structure
+	# itself pays no basic, so the slip carries only the Additional Salary bonus.
+	_fix_assign(emp_l, "MW Fix L Bonus Only", 3700, from_date="2026-01-16")
+	bonus_l = frappe.get_doc({
+		"doctype": "Additional Salary", "employee": emp_l, "company": COMPANY,
+		"salary_component": "MW Lean Bonus", "amount": 1000, "payroll_date": date(2026, 1, 20),
+	}).insert(ignore_permissions=True)
+	bonus_l.submit()
+	slip_l_bonus = _fix_slip(emp_l, "MW Fix L Bonus Only", date(2026, 1, 16), date(2026, 1, 31))
+	_fix_check(results, "L normal slip PCB", _fix_deduction(slip_l_normal, "PCB"), "0.00")
+	_fix_check(results, "L bonus slip gross (bonus only)", slip_l_bonus.gross_pay, "1000.00")
+	_fix_check(results, "L bonus slip normal wages", _fix_result(slip_l_bonus, "PCB").regular_wages, "0.00")
+	_fix_check(results, "L bonus slip PCB (month total)", _fix_result(slip_l_bonus, "PCB").employee_amount, "24.60")
+	_fix_check(results, "L bonus slip PCB deduction",
+		_fix_deduction(slip_l_bonus, "PCB"), _fix_result(slip_l_bonus, "PCB").employee_amount)
+	_fix_check(results, "L month zakat cash total",
+		_fix_deduction(slip_l_normal, "Zakat") + _fix_deduction(slip_l_bonus, "Zakat"), "5.00")
+	_fix_check(results, "L month EPF total",
+		_fix_result(slip_l_normal, "EPF").employee_amount + _fix_result(slip_l_bonus, "EPF").employee_amount,
+		"517.00")
+	_fix_check(results, "L month SOCSO total",
+		_fix_result(slip_l_normal, "SOCSO").employee_amount + _fix_result(slip_l_bonus, "SOCSO").employee_amount,
+		"23.25")
+
 	# 8e. LHDN filing over January: J and K lines, and CP39 counts derived from the
 	#     D-lines that actually carry MTD or CP38 (Exhibit 4 fields 7 and 9).
 	lhdn_jan = _fix_filing("LHDN", date(2026, 1, 1), date(2026, 1, 31))
 	_fix_check(results, "LHDN Jan J MTD", _fix_line(lhdn_jan, emp_j).employee_amount, "24.60")
 	_fix_check(results, "LHDN Jan K MTD", _fix_line(lhdn_jan, emp_k).employee_amount, "584.85")
+	_fix_check(results, "LHDN Jan L MTD (bonus-only slip route)", _fix_line(lhdn_jan, emp_l).employee_amount, "24.60")
 	file_name = frappe.db.get_value("File", {"file_url": lhdn_jan.generated_file}, "name")
 	raw_content = frappe.get_doc("File", file_name).get_content()
 	file_text = raw_content.decode("ascii") if isinstance(raw_content, (bytes, bytearray)) else raw_content
