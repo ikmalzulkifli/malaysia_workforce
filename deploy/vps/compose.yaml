@@ -152,8 +152,9 @@ services:
     volumes:
       - payroll_sites:/home/frappe/frappe-bench/sites:ro
     networks:
-      - payroll_internal
-      - ingress
+      payroll_internal:
+        ipv4_address: ${FRONTEND_INTERNAL_IP:?FRONTEND_INTERNAL_IP is required}
+      ingress: {}
     depends_on:
       web: {condition: service_started}
       socketio: {condition: service_started}

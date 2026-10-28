@@ -51,13 +51,13 @@
     },
     {
       "path": "deploy/vps/Dockerfile",
-      "size": 3389,
-      "sha256": "de9b6be4ee75a7c849e571a5922f5dd701c063d1a345d580cb26890893f9b60b"
+      "size": 3414,
+      "sha256": "b850c9fcdf2162a94cad5563836a933c79a0da0e3e102df9296a40345db1eb3c"
     },
     {
       "path": "deploy/vps/README.md",
-      "size": 9548,
-      "sha256": "cf808782770ccdb6931e599707c59e5a35d09bef5e65fa577a071b23b1da40ee"
+      "size": 9921,
+      "sha256": "60cd76d6bc79391f2657db7821e877d32218212c0406d164450b4e64c0ef37de"
     },
     {
       "path": "deploy/vps/backup.sh",
@@ -71,13 +71,13 @@
     },
     {
       "path": "deploy/vps/compose.yaml",
-      "size": 5161,
-      "sha256": "599c2596d5b0915e78c7fde010b30130390e8cc50c1bb64b2f3ac3006314d1c1"
+      "size": 5242,
+      "sha256": "750f2c63e47a76085e26011418e3f01d9642bdf194193d922a02603e1ff049c1"
     },
     {
       "path": "deploy/vps/entrypoint.sh",
-      "size": 3187,
-      "sha256": "5e7535e83f6e395281e3d4a0df3ce6696c9cfdfbf7e499a7506fabbb9fcd1d50"
+      "size": 3269,
+      "sha256": "351c381a521873968c8403c1ad21bc5752dc1b674c7f54b5b5b68dcc063f7370"
     },
     {
       "path": "deploy/vps/frontend/default.conf.template",
@@ -91,13 +91,13 @@
     },
     {
       "path": "deploy/vps/payroll.env.example",
-      "size": 497,
-      "sha256": "6c6963c37a1ef49f20b0adcc02dddffe8e5b969e5ef10b67d0454aa3b5c42ba1"
+      "size": 698,
+      "sha256": "0f1413c1b9263fc7c2e7248837354f251db4301994ddb5efa0224ff86cc58531"
     },
     {
       "path": "deploy/vps/restore.sh",
-      "size": 1971,
-      "sha256": "7d2ef7f3b727a288a7ee490ce0a3c1003eecc14dd68bd0c8b7628d6f8ffee642"
+      "size": 2766,
+      "sha256": "356eaead533b2cf76af9499c3d607c459c7fd1418280b6fc88e4756f61387aac"
     },
     {
       "path": "deploy/vps/setup.sh",

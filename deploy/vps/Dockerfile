@@ -5,7 +5,8 @@
 FROM node:24-bookworm AS node
 
 FROM python:3.14-slim-bookworm AS builder
-ENV DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_FRONTEND=noninteractive \
+    BENCH_DISABLE_UV=1
 RUN apt-get update && apt-get install -y --no-install-recommends \
       git curl ca-certificates pkg-config build-essential libmariadb-dev \
       libffi-dev libssl-dev libjpeg62-turbo-dev zlib1g-dev \

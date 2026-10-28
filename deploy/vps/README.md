@@ -50,7 +50,9 @@ process.
    manual snapshot before the ingress change if policy requires it.
 5. PDF renderer: the image ships `wkhtmltopdf`; the app selects it when present.
 6. Build the image for the VPS architecture and push or load it:
-   `docker build --platform linux/amd64 -f deploy/vps/Dockerfile -t ocean6-payroll:pilot-513665a .`
+   `docker build --platform linux/amd64 -f deploy/vps/Dockerfile -t ocean6-payroll:pilot-<commit> .`
+   Tag the image with the commit SHA being deployed, and set `APP_IMAGE_TAG`
+   to the same value in `payroll.env`.
    The Lightsail instance is x86_64; a workstation build is usually arm64.
    Build with `--platform linux/amd64` (or on an amd64 builder) and verify the
    image runs before loading it on the host.
@@ -105,6 +107,7 @@ unavailable. The site hostname must have a certificate valid for that name.
 - A new named volume inherits the image's `sites/` (bench-init default), so `common_site_config.json` must be rendered on every start and the asset seed must be refreshed by a content hash, not only an image tag.
 - `bench build` cannot run in the runtime image (no yarn). Assets are built in the builder; never rebuild them on the host.
 - A stale Redis `assets_json` entry can survive a volume re-seed; setup clears the cache, and a restart of `web` after an asset change is required.
+- Gunicorn is started directly (not via Frappe's development `serve()` ProxyFix), so it only honours `X-Forwarded-Proto` from `TRUSTED_PROXY_IP`. The frontend has a fixed internal address (`FRONTEND_INTERNAL_IP`); keep both values equal and never use `*`.
 
 ## Acceptance (fictional data only)
 

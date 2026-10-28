@@ -36,8 +36,24 @@ MYSQL_PWD="$DB_ROOT_PASSWORD" mysql --host=db --user=root \
   -e "CREATE DATABASE \`$TARGET_DB\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
 MYSQL_PWD="$DB_ROOT_PASSWORD" mysql --host=db --user=root "$TARGET_DB" < "$SRC/database.sql"
 
-EXTRACT="${RESTORE_FILES_DIR:-/tmp/payroll-restore-$TARGET_DB}"
-rm -rf "$EXTRACT"
-mkdir -p "$EXTRACT"
+STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+EXTRACT="${RESTORE_FILES_DIR:-/tmp/payroll-restore-$TARGET_DB-$STAMP}"
+case "$EXTRACT" in
+  /tmp/payroll-restore-*) ;;
+  *) echo "refusing: extraction path must start with /tmp/payroll-restore-" >&2; exit 64 ;;
+esac
+case "$EXTRACT" in
+  *..*) echo "refusing: extraction path may not contain .." >&2; exit 64 ;;
+esac
+PARENT="$(dirname "$EXTRACT")"
+[ -d "$PARENT" ] && [ ! -L "$PARENT" ] || {
+  echo "refusing: extraction parent $PARENT is missing or a symlink" >&2; exit 64; }
+if [ -e "$EXTRACT" ] || [ -L "$EXTRACT" ]; then
+  echo "refusing: extraction path $EXTRACT already exists" >&2
+  exit 69
+fi
+# Create a fresh private directory; mkdir fails if another process wins the race.
+mkdir -m 0700 "$EXTRACT" || { echo "refusing: could not create $EXTRACT" >&2; exit 69; }
+[ ! -L "$EXTRACT" ] || { echo "refusing: extraction path became a symlink" >&2; exit 64; }
 tar -C "$EXTRACT" -xzf "$SRC/site-files.tgz"
 echo "RESTORE_OK db=$TARGET_DB files=$EXTRACT"

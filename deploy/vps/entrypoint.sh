@@ -76,6 +76,7 @@ case "$ROLE" in
       -w "${GUNICORN_WORKERS:-2}" \
       --max-requests 1000 --max-requests-jitter 100 \
       -t 120 --graceful-timeout 30 \
+      --forwarded-allow-ips="${TRUSTED_PROXY_IP:?TRUSTED_PROXY_IP is required}" \
       frappe.app:application --preload
     ;;
   worker)
