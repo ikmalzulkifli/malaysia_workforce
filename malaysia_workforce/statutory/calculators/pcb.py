@@ -223,9 +223,5 @@ def calculate_pcb(args: PCBInput) -> PCBResult:
 		projected_epf_with_additional=projected_epf_with_additional,
 		category=args.category,
 		rule_version=RULE_VERSION,
-		explanation=(
-			"LHDN computerized MTD formula for normal remuneration",
-			"Additional remuneration formula applied when current additional remuneration is positive",
-			"Intermediate calculations truncated to two decimals; final MTD rounded up to five sen",
-		),
+		explanation=tuple(explanation),
 	)

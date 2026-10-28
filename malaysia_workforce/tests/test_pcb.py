@@ -435,3 +435,23 @@ def test_additional_mtd_uses_unfloored_step_c_when_normal_mtd_is_below_rm10():
 	assert result.additional_mtd == d("29.60")
 	assert result.payable == d("29.60")
 	assert result.payable < result.annual_tax_with_additional
+
+
+def test_zakat_offset_is_reported_in_the_explanation():
+	with_offset = calculate_pcb(
+		PCBInput(
+			month=4, resident=True, category=3,
+			current_normal_gross=d(5500), current_additional_gross=d(8250),
+			current_normal_epf=d(605), current_additional_epf=d(908),
+			prior_gross=d(16500), prior_epf_relief=d(1815), prior_mtd=d("328.20"),
+			prior_optional_reliefs=d(300), current_optional_reliefs=d(300), child_units=d(3),
+			prior_zakat=d(300), current_zakat=d(100),
+		)
+	)
+	assert with_offset.zakat_offset_additional == d("27.10")
+	assert any("Zakat not absorbed" in line and "27.10" in line for line in with_offset.explanation)
+
+	without_offset = calculate_pcb(
+		PCBInput(month=1, resident=True, category=3, current_normal_gross=d(5500), current_normal_epf=d(605))
+	)
+	assert not any("Zakat not absorbed" in line for line in without_offset.explanation)

@@ -47,26 +47,67 @@ def test_lhdn_exhibit_4_lengths_and_totals():
 	assert [len(line) for line in content.decode("ascii").splitlines()] == [57, 136]
 
 
-def test_lhdn_header_counts_every_emitted_detail_line():
-	"""A zero-MTD low earner still gets a D-line, so the header count must include it too."""
-	records = (
-		LHDNPCBRecord(
-			tin="IG 531367-080", name="Employee A", new_ic="900101011234",
-			mtd_amount=Decimal("110.00"), cp38_amount=Decimal("25.50"), employee_number="EMP0000001",
-		),
-		LHDNPCBRecord(
-			tin="IG 531367-081", name="Employee B", new_ic="900101011235",
-			mtd_amount=Decimal("0.00"), cp38_amount=Decimal("0.00"), employee_number="EMP0000002",
-		),
+def _record(tin, mtd, cp38):
+	return LHDNPCBRecord(
+		tin=tin, name="Employee", new_ic="900101011234",
+		mtd_amount=Decimal(mtd), cp38_amount=Decimal(cp38), employee_number="EMP0000001",
 	)
-	header = render_header(hq_number="E90891510", employer_number="E123456789", year=2026, month=1, records=records)
+
+
+def _header(records):
+	return render_header(
+		hq_number="E90891510", employer_number="E123456789", year=2026, month=1, records=records
+	)
+
+
+def _counts(header):
+	return header[37:42], header[52:57]
+
+
+def test_lhdn_header_counts_fields_independently():
+	"""Exhibit 4 fields 7 and 9 are separate counts, not one shared total."""
+	mtd_only = _header((_record("IG 531367-080", "110.00", "0.00"),))
+	assert _counts(mtd_only) == ("00001", "00000")
+	assert mtd_only[27:37] == "0000011000"
+	assert mtd_only[42:52] == "0000000000"
+
+	cp38_only = _header((_record("IG 531367-080", "0.00", "25.50"),))
+	assert _counts(cp38_only) == ("00000", "00001")
+	assert cp38_only[27:37] == "0000000000"
+	assert cp38_only[42:52] == "0000002550"
+
+	both = _header((_record("IG 531367-080", "110.00", "25.50"),))
+	assert _counts(both) == ("00001", "00001")
+
+
+def test_lhdn_header_counts_mixed_records_and_keeps_zero_lines():
+	"""Zero/zero employees keep their detail line; they simply count in neither field.
+
+	Exhibit 4/5 do not settle whether a zero/zero line should be omitted, so the
+	exporter keeps it rather than dropping it on assumption.
+	"""
+	records = (
+		_record("IG 531367-080", "110.00", "25.50"),   # both
+		_record("IG 531367-081", "0.00", "25.50"),    # CP38 only
+		_record("IG 531367-082", "110.00", "0.00"),   # MTD only
+		_record("IG 531367-083", "0.00", "0.00"),     # zero/zero
+	)
+	header = _header(records)
+	assert _counts(header) == ("00002", "00002")
 	content = generate_lhdn_pcb_file(
 		hq_number="E90891510", employer_number="E123456789", year=2026, month=1, records=records
 	)
-	detail_line_count = len(content.decode("ascii").splitlines()) - 1
-	assert header[37:42] == "00002"
-	assert header[52:57] == "00002"
-	assert detail_line_count == 2
+	lines = content.decode("ascii").splitlines()
+	assert len(lines) == 5
+	assert [len(line) for line in lines] == [57, 136, 136, 136, 136]
+	assert content.endswith(b"\r\n")
+
+
+def test_lhdn_header_zero_zero_only():
+	header = _header((_record("IG 531367-080", "0.00", "0.00"),))
+	assert _counts(header) == ("00000", "00000")
+	assert header[27:37] == "0000000000"
+	assert header[42:52] == "0000000000"
 
 
 def test_lhdn_rejects_overlength_critical_fields():

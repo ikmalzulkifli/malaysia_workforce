@@ -53,11 +53,16 @@ def render_header(
 		raise ValueError("LHDN month must be between 1 and 12")
 	if int(year) < 2000 or int(year) > 9999:
 		raise ValueError("LHDN year must contain four digits")
-	# generate_lhdn_pcb_file() writes one D-line per item regardless of amount, so the header
-	# count must match that total rather than filtering by nonzero amount — a filtered count
-	# would under-report against the D-lines actually present. Confirm against the official
-	# LHDN Exhibit 4/e-Data PCB spec during portal UAT.
-	record_count = str(len(items)).zfill(5)
+	# Exhibit 4 fields 7 and 9 are separate counts: "Total MTD Records" tallies employees
+	# subject to MTD and "Total CP38 Records" tallies employees subject to CP38 (their
+	# worked example shows 6 MTD records and 2 CP38 records in the same file). A single
+	# count for both under-reports one field whenever the two differ.
+	#
+	# A detail line is still written for every record, including zero/zero employees.
+	# Whether such a line should be omitted is not settled by Exhibit 4/5, so it is left
+	# in place rather than dropped on assumption; it simply counts in neither field.
+	mtd_records = sum(1 for item in items if Decimal(str(item.mtd_amount or 0)) > 0)
+	cp38_records = sum(1 for item in items if Decimal(str(item.cp38_amount or 0)) > 0)
 	record = "".join(
 		(
 			"H",
@@ -66,9 +71,9 @@ def render_header(
 			str(int(year)).zfill(4),
 			str(int(month)).zfill(2),
 			cents(sum((item.mtd_amount for item in items), Decimal("0")), 10),
-			record_count,
+			str(mtd_records).zfill(5),
 			cents(sum((item.cp38_amount for item in items), Decimal("0")), 10),
-			record_count,
+			str(cp38_records).zfill(5),
 		)
 	)
 	return assert_length(record, HEADER_LENGTH, "LHDN PCB header")

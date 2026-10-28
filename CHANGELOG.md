@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- CP39 header now writes independent "Total MTD Records" and "Total CP38 Records" counts (Exhibit 4 fields 7 and 9) instead of the same number in both. An MTD-only employee no longer produces a CP38 count of one. Detail lines, including zero/zero employees, are unchanged pending HASiL confirmation on whether such lines should be omitted.
+- The zakat-offset explanation is no longer discarded: `calculate_pcb()` returns the constructed explanation, so the saved Salary Slip statutory result records why additional-remuneration MTD was reduced.
+
 - Salary Slip statutory deductions are now authoritative. The app no longer calls `calculate_net_pay()` after writing its rows (which let Salary Structure components with the same name overwrite the statutory amount) and no longer skips calculation at submission. Managed rows are rewritten on every save and again at submit, then totals and net pay are recomputed once. A Salary Structure that contains EPF Employee, SOCSO Employee, SKBBK Employee, EIS Employee, PCB or CP38 can no longer change the payslip amount.
 - Zakat is no longer an app-managed deduction. Re-appending it duplicated an Additional Salary zakat row on every save, so the employee was deducted twice while the PCB offset and filing showed one amount. The Salary Structure or Additional Salary row is left in place and used once.
 - Statutory results store each slip's own wage contribution in the new `Malaysia Statutory Result.slip_wages` field. Same-month accumulation for SOCSO, EIS and HRD Corp now uses that value instead of the cumulative monthly `wage_base`, which compounded across slips (two RM2,000 slips produced RM6,000 of wages; three produced RM14,000 and over-levied HRD Corp). Filing wage columns and the scheme breakdown use the same per-slip value. Periods filed by an earlier build keep the cumulative base; preparing such a multi-slip period now fails closed with an explanation instead of exporting a guessed wage.

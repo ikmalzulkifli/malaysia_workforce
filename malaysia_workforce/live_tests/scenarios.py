@@ -1840,6 +1840,88 @@ def run_payroll_fixes(*, commit: bool = True) -> dict:
 		legacy_blocked = "earlier build" in str(exc)
 	_fix_check(results, "Legacy same-month rows block a new slip", legacy_blocked, True)
 
+	# 8c. Low normal PCB with a bonus and payroll zakat, end to end: save -> reload ->
+	#     submit -> reload -> LHDN filing. RM3,700 normal plus a RM1,000 bonus gives
+	#     RM29.60 additional MTD; RM5 zakat offsets it to RM24.60 (HASiL E.5(ii) rule).
+	emp_j = _fix_employee("J", 3700)
+	_fix_assign(emp_j, _fix_structure("MW Fix J", 3700), 3700)
+	zakat_j = frappe.get_doc({
+		"doctype": "Additional Salary", "employee": emp_j, "company": COMPANY,
+		"salary_component": "Zakat", "amount": 5, "payroll_date": date(2026, 1, 10),
+	}).insert(ignore_permissions=True)
+	zakat_j.submit()
+	bonus_j = frappe.get_doc({
+		"doctype": "Additional Salary", "employee": emp_j, "company": COMPANY,
+		"salary_component": "MW Lean Bonus", "amount": 1000, "payroll_date": date(2026, 1, 20),
+	}).insert(ignore_permissions=True)
+	bonus_j.submit()
+	draft_j = _fix_slip(emp_j, "MW Fix J", date(2026, 1, 1), date(2026, 1, 31), submit=False)
+	draft_j.reload()
+	_fix_check(results, "J draft PCB before submit", _fix_deduction(draft_j, "PCB"), "24.60")
+	draft_j.submit()
+	draft_j.reload()
+	zakat_rows_j = [row for row in draft_j.deductions if row.salary_component == "Zakat"]
+	_fix_check(results, "J zakat cash deduction rows", len(zakat_rows_j), "1")
+	_fix_check(results, "J zakat cash deduction", _fix_deduction(draft_j, "Zakat"), "5.00")
+	_fix_check(results, "J PCB after submit", _fix_result(draft_j, "PCB").employee_amount, "24.60")
+	_fix_check(results, "J PCB deduction equals result",
+		_fix_deduction(draft_j, "PCB"), _fix_result(draft_j, "PCB").employee_amount)
+	_fix_check(results, "J net pay = gross - deductions", draft_j.net_pay,
+		_D(str(draft_j.gross_pay)) - _D(str(draft_j.total_deduction)))
+	_fix_check(results, "J zakat offset recorded in saved result",
+		any("Zakat not absorbed" in (row.explanation or "") for row in draft_j.custom_malaysia_statutory_results),
+		"True")
+
+	# 8d. The same month through a second slip: zakat on the first half-month slip, the
+	#     bonus on the second, still exactly one cash zakat and one month PCB.
+	emp_k = _fix_employee("K", 3700)
+	_fix_assign(emp_k, _fix_structure("MW Fix K", 3700), 3700)
+	zakat_k = frappe.get_doc({
+		"doctype": "Additional Salary", "employee": emp_k, "company": COMPANY,
+		"salary_component": "Zakat", "amount": 5, "payroll_date": date(2026, 1, 10),
+	}).insert(ignore_permissions=True)
+	zakat_k.submit()
+	slip_ka = _fix_slip(emp_k, "MW Fix K", date(2026, 1, 1), date(2026, 1, 15))
+	bonus_k = frappe.get_doc({
+		"doctype": "Additional Salary", "employee": emp_k, "company": COMPANY,
+		"salary_component": "MW Lean Bonus", "amount": 1000, "payroll_date": date(2026, 1, 20),
+	}).insert(ignore_permissions=True)
+	bonus_k.submit()
+	slip_kb = _fix_slip(emp_k, "MW Fix K", date(2026, 1, 16), date(2026, 1, 31))
+	_fix_check(results, "K first slip PCB", _fix_deduction(slip_ka, "PCB"), "0.00")
+	# Month normal 7,400 + bonus 1,000. P1 uses kt=0: K2 = (4,000 - 814)/11 = 289.63,
+	# P1 = 6,586 + (7,400 - 289.63) x 11 - 9,000 = 75,800.07, X1 = 4,802.01, Step[C]
+	# 400.20. P2 uses kt=110: K2 = 279.63, P2 = 76,800.07, X2 = 4,992.01, additional
+	# 4,992.01 - 400.20 x 12 = 189.61 -> 189.65. Zakat 5 is absorbed by the normal MTD,
+	# so payable = 395.20 + 189.65 = 584.85.
+	_fix_check(results, "K second slip PCB (month total)", _fix_result(slip_kb, "PCB").employee_amount, "584.85")
+	_fix_check(results, "K second slip PCB deduction",
+		_fix_deduction(slip_kb, "PCB"), _fix_result(slip_kb, "PCB").employee_amount)
+	_fix_check(results, "K month zakat cash total",
+		_fix_deduction(slip_ka, "Zakat") + _fix_deduction(slip_kb, "Zakat"), "5.00")
+	_fix_check(results, "K month PCB total",
+		_fix_result(slip_ka, "PCB").employee_amount + _fix_result(slip_kb, "PCB").employee_amount, "584.85")
+
+	# 8e. LHDN filing over January: J and K lines, and CP39 counts derived from the
+	#     D-lines that actually carry MTD or CP38 (Exhibit 4 fields 7 and 9).
+	lhdn_jan = _fix_filing("LHDN", date(2026, 1, 1), date(2026, 1, 31))
+	_fix_check(results, "LHDN Jan J MTD", _fix_line(lhdn_jan, emp_j).employee_amount, "24.60")
+	_fix_check(results, "LHDN Jan K MTD", _fix_line(lhdn_jan, emp_k).employee_amount, "584.85")
+	file_name = frappe.db.get_value("File", {"file_url": lhdn_jan.generated_file}, "name")
+	raw_content = frappe.get_doc("File", file_name).get_content()
+	file_text = raw_content.decode("ascii") if isinstance(raw_content, (bytes, bytearray)) else raw_content
+	lines = file_text.splitlines()
+	header, details = lines[0], lines[1:]
+	mtd_lines = sum(1 for line in details if int(line[110:118]) > 0)
+	cp38_lines = sum(1 for line in details if int(line[118:126]) > 0)
+	_fix_check(results, "CP39 MTD record count", header[37:42], str(mtd_lines).zfill(5))
+	_fix_check(results, "CP39 CP38 record count", header[52:57], str(cp38_lines).zfill(5))
+	_fix_check(results, "CP39 CP38 count is zero", header[52:57], "00000")
+	_fix_check(results, "CP39 detail lines kept", len(details), str(len(lhdn_jan.employee_lines)))
+	_fix_check(results, "CP39 header total MTD matches lines",
+		int(header[27:37]), sum(int(line[110:118]) for line in details))
+	_fix_check(results, "CP39 file uses CRLF", file_text.endswith("\r\n"), "True")
+
 	# 9. Missing Salary Component accounts are reported before payroll, naming both the
 	#    component and the company (previously only the accrual journal failed).
 	from malaysia_workforce.payroll.validation import missing_component_account_issues
