@@ -10,7 +10,7 @@ jobs:
   build:
     name: Build and smoke linux/amd64
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
       - name: Show pinned stack
@@ -33,10 +33,9 @@ jobs:
           docker run --rm --entrypoint sh "$IMG" -c "printf '<p>smoke</p>' | wkhtmltopdf -q - /tmp/s.pdf && head -c 4 /tmp/s.pdf"
           docker image inspect "$IMG" --format 'id={{.Id}} arch={{.Os}}/{{.Architecture}}'
 
-      - name: Stack smoke
+      - name: Stack smoke (setup, startup, payroll scenario)
         run: |
           set -euo pipefail
-          IMG="ocean6-payroll:pilot-${GITHUB_SHA::7}"
           RUNTIME="$GITHUB_WORKSPACE/runtime"
           mkdir -p "$RUNTIME/backups"
           {
@@ -56,6 +55,12 @@ jobs:
             echo "INGRESS_NETWORK=payroll-ci-ingress"
           } > "$RUNTIME/payroll.env"
           chmod 600 "$RUNTIME/payroll.env"
+          cat > "$RUNTIME/Caddyfile" <<'CADDY'
+          payroll.localhost {
+          	tls internal
+          	reverse_proxy frontend:8080
+          }
+          CADDY
           docker network create payroll-ci-ingress >/dev/null 2>&1 || true
           C=(docker compose --env-file "$RUNTIME/payroll.env" -f deploy/vps/compose.yaml -f deploy/vps/compose.local.yaml -p ocean6-payroll-ci)
           "${C[@]}" up -d db redis-cache redis-queue
@@ -66,9 +71,203 @@ jobs:
             sleep 3
           done
           curl -fsS -H 'Host: payroll.localhost' http://127.0.0.1:8088/api/method/ping
-          "${C[@]}" exec -T web gosu frappe bench --site payroll.localhost execute malaysia_workforce.live_tests.scenarios.run_payroll_fixes | head -c 400
+          "${C[@]}" exec -T web gosu frappe bench --site payroll.localhost execute malaysia_workforce.live_tests.scenarios.run_payroll_fixes > /tmp/scenario.json
+          cp /tmp/scenario.json "$GITHUB_WORKSPACE/scenario.json"
+          head -c 400 /tmp/scenario.json
           echo
-          "${C[@]}" stop
+          python3 - /tmp/scenario.json <<'PY'
+          import json, sys
+          text = open(sys.argv[1]).read()
+          data = json.loads(text[text.index("{"):text.rindex("}") + 1])
+          assert data["failed"] == 0, data["failed"]
+          assert data["checks"] == 78, data["checks"]
+          print("scenario", data["checks"], "checks, 0 failed")
+          PY
+
+      - name: "Acceptance 1: HTTPS identity and Secure cookie"
+        run: |
+          set -euo pipefail
+          RUNTIME="$GITHUB_WORKSPACE/runtime"
+          C=(docker compose --env-file "$RUNTIME/payroll.env" -f deploy/vps/compose.yaml -f deploy/vps/compose.local.yaml -p ocean6-payroll-ci)
+          docker run -d --name payroll-caddy-ci \
+            --network ocean6-payroll-ci_payroll_internal \
+            -p 127.0.0.1:8445:443 \
+            -v "$RUNTIME/Caddyfile":/etc/caddy/Caddyfile:ro \
+            -v payroll-caddy-ci-data:/data caddy:2-alpine
+          for i in $(seq 1 30); do
+            if docker exec payroll-caddy-ci test -f /data/caddy/pki/authorities/local/root.crt 2>/dev/null; then break; fi
+            sleep 2
+          done
+          docker exec payroll-caddy-ci cat /data/caddy/pki/authorities/local/root.crt > /tmp/ca.crt
+          test -s /tmp/ca.crt
+          ADMIN=$(grep '^ADMIN_PASSWORD=' "$RUNTIME/payroll.env" | cut -d= -f2-)
+          curl -fsS --cacert /tmp/ca.crt --resolve payroll.localhost:8445:127.0.0.1 \
+            -D /tmp/login_headers.txt -c /tmp/cj_admin \
+            -X POST "https://payroll.localhost:8445/api/method/login" \
+            --data-urlencode "usr=Administrator" --data-urlencode "pwd=$ADMIN" -o /dev/null
+          grep -i '^set-cookie: sid' /tmp/login_headers.txt | sed -E 's/(sid=)[^;]+/\1<redacted>/'
+          grep -qi '^set-cookie: sid=[^;]*;.*Secure' /tmp/login_headers.txt
+          grep -qi '^set-cookie: sid=[^;]*;.*HttpOnly' /tmp/login_headers.txt
+          IDENT=$(curl -fsS --cacert /tmp/ca.crt --resolve payroll.localhost:8445:127.0.0.1 \
+            -b /tmp/cj_admin "https://payroll.localhost:8445/api/method/frappe.auth.get_logged_user")
+          echo "identity=$IDENT"
+          [ "$IDENT" = '{"message":"Administrator"}' ]
+
+      - name: "Acceptance 2: payslip PDF"
+        run: |
+          set -euo pipefail
+          RUNTIME="$GITHUB_WORKSPACE/runtime"
+          C=(docker compose --env-file "$RUNTIME/payroll.env" -f deploy/vps/compose.yaml -f deploy/vps/compose.local.yaml -p ocean6-payroll-ci)
+          SLIP=$("${C[@]}" exec -T web gosu frappe bench --site payroll.localhost execute frappe.db.get_value \
+            --kwargs '{"doctype":"Salary Slip","filters":{"docstatus":1},"fieldname":"name"}' | tr -d '"')
+          echo "slip=$SLIP"
+          curl -fsS --cacert /tmp/ca.crt --resolve payroll.localhost:8445:127.0.0.1 \
+            -b /tmp/cj_admin -X POST "https://payroll.localhost:8445/api/method/hrms.api._download_pdf" \
+            --data-urlencode "doctype=Salary Slip" --data-urlencode "docname=$SLIP" \
+            -o /tmp/slip.pdf -w 'pdf http=%{http_code} bytes=%{size_download}\n'
+          head -c 5 /tmp/slip.pdf | grep -q '%PDF-'
+          tail -c 64 /tmp/slip.pdf | grep -q '%%EOF'
+          echo "pdf magic ok, eof ok"
+
+      - name: "Acceptance 3: private file access"
+        run: |
+          set -euo pipefail
+          RUNTIME="$GITHUB_WORKSPACE/runtime"
+          BASE="https://payroll.localhost:8445"
+          R=(--cacert /tmp/ca.crt --resolve payroll.localhost:8445:127.0.0.1)
+          C=(docker compose --env-file "$RUNTIME/payroll.env" -f deploy/vps/compose.yaml -f deploy/vps/compose.local.yaml -p ocean6-payroll-ci)
+          printf 'ci-private-check' > /tmp/private_probe.txt
+          UP=$(curl -fsS "${R[@]}" -b /tmp/cj_admin -X POST "$BASE/api/method/upload_file" \
+            -F "file=@/tmp/private_probe.txt" -F "doctype=User" -F "docname=Administrator" -F "is_private=1")
+          URL=$(python3 -c "import json,sys; print(json.load(sys.stdin)['message']['file_url'])" <<<"$UP")
+          echo "file=$URL"
+          GUEST=$(curl -s "${R[@]}" -o /dev/null -w '%{http_code}' "$BASE$URL")
+          ADMINF=$(curl -s "${R[@]}" -b /tmp/cj_admin -o /dev/null -w '%{http_code}' "$BASE$URL")
+          curl -fsS "${R[@]}" -b /tmp/cj_admin -H 'Content-Type: application/json' -X POST "$BASE/api/resource/User" \
+            -d '{"email":"outsider@example.com","first_name":"Outsider","send_welcome_email":0,"roles":[{"role":"Employee"}]}' >/dev/null
+          "${C[@]}" exec -T web gosu frappe bench --site payroll.localhost execute frappe.utils.password.update_password \
+            --kwargs '{"user":"outsider@example.com","pwd":"Outsider-Pilot-2026"}' >/dev/null
+          curl -fsS "${R[@]}" -c /tmp/cj_out -X POST "$BASE/api/method/login" \
+            --data-urlencode "usr=outsider@example.com" --data-urlencode "pwd=Outsider-Pilot-2026" -o /dev/null
+          OUTSIDER=$(curl -s "${R[@]}" -b /tmp/cj_out -o /dev/null -w '%{http_code}' "$BASE$URL")
+          echo "guest=$GUEST outsider=$OUTSIDER admin=$ADMINF"
+          [ "$GUEST" = 403 ] && [ "$OUTSIDER" = 403 ] && [ "$ADMINF" = 200 ]
+
+      - name: "Acceptance 4: queue restart recovery"
+        run: |
+          set -euo pipefail
+          RUNTIME="$GITHUB_WORKSPACE/runtime"
+          C=(docker compose --env-file "$RUNTIME/payroll.env" -f deploy/vps/compose.yaml -f deploy/vps/compose.local.yaml -p ocean6-payroll-ci)
+          "${C[@]}" stop worker
+          "${C[@]}" exec -T web gosu frappe bench --site payroll.localhost execute frappe.enqueue \
+            --kwargs '{"method":"frappe.client.set_value","queue":"default","doctype":"User","name":"Administrator","fieldname":"last_name","value":"ci-queue-ok"}' >/dev/null
+          "${C[@]}" restart redis-queue
+          sleep 5
+          "${C[@]}" start worker
+          VALUE=""
+          for i in $(seq 1 20); do
+            VALUE=$("${C[@]}" exec -T web gosu frappe bench --site payroll.localhost execute frappe.db.get_value \
+              --kwargs '{"doctype":"User","filters":{"name":"Administrator"},"fieldname":"last_name"}' 2>/dev/null | tail -1)
+            [ "$VALUE" = '"ci-queue-ok"' ] && break
+            sleep 3
+          done
+          echo "queue result=$VALUE"
+          [ "$VALUE" = '"ci-queue-ok"' ]
+          echo "job ok count=$("${C[@]}" logs worker --tail=20 2>&1 | grep -c 'Job OK' || true)"
+
+      - name: "Acceptance 5: user-scoped realtime"
+        run: |
+          set -euo pipefail
+          RUNTIME="$GITHUB_WORKSPACE/runtime"
+          C=(docker compose --env-file "$RUNTIME/payroll.env" -f deploy/vps/compose.yaml -f deploy/vps/compose.local.yaml -p ocean6-payroll-ci)
+          # Redis restarted in the previous step; the realtime subscriber does not
+          # recover on its own, so restart socketio before asserting delivery.
+          "${C[@]}" restart socketio
+          sleep 6
+          grep -q payroll.localhost /etc/hosts || echo "127.0.0.1 payroll.localhost" | sudo tee -a /etc/hosts >/dev/null
+          python3 -m venv /tmp/sio-venv
+          /tmp/sio-venv/bin/pip install -q "python-socketio[client]"
+          cat > /tmp/sio_client.py <<'PY'
+          import json, sys, time, socketio
+          cookie, label = sys.argv[1], sys.argv[2]
+          ns = "/payroll.localhost"
+          client = socketio.Client(ssl_verify="/tmp/ca.crt", reconnection=False)
+          seen = []
+          @client.on("*", namespace=ns)
+          def catch(event, data):
+              seen.append((event, data))
+          headers = {"Origin": "http://payroll.localhost:8088"}
+          if cookie != "-":
+              headers["Cookie"] = f"sid={cookie}"
+          try:
+              client.connect("https://payroll.localhost:8445", headers=headers,
+                             namespaces=[ns], transports=["polling"], wait_timeout=15)
+          except Exception as exc:
+              print(label, "CONNECT_ERROR", type(exc).__name__, str(exc)[:120])
+              raise SystemExit(0)
+          print(label, "connected", bool(client.sid), flush=True)
+          time.sleep(9)
+          print(label, "events", json.dumps(seen), flush=True)
+          client.disconnect()
+          PY
+          ADMIN_SID=$(awk '$6=="sid"{print $7}' /tmp/cj_admin)
+          OUT_SID=$(awk '$6=="sid"{print $7}' /tmp/cj_out)
+          /tmp/sio-venv/bin/python /tmp/sio_client.py "$ADMIN_SID" admin > /tmp/rt_admin.txt 2>&1 &
+          /tmp/sio-venv/bin/python /tmp/sio_client.py "$OUT_SID" outsider > /tmp/rt_outsider.txt 2>&1 &
+          /tmp/sio-venv/bin/python /tmp/sio_client.py - guest > /tmp/rt_guest.txt 2>&1 &
+          sleep 5
+          "${C[@]}" exec -T web gosu frappe bench --site payroll.localhost execute frappe.publish_realtime \
+            --kwargs '{"event":"pilot-amd64","message":{"msg":"one"},"user":"Administrator"}' >/dev/null
+          sleep 1
+          "${C[@]}" exec -T web gosu frappe bench --site payroll.localhost execute frappe.publish_realtime \
+            --kwargs '{"event":"pilot-amd64","message":{"msg":"two"},"user":"Administrator"}' >/dev/null
+          wait
+          cat /tmp/rt_admin.txt /tmp/rt_outsider.txt /tmp/rt_guest.txt
+          grep -q 'admin connected True' /tmp/rt_admin.txt
+          grep -q 'admin events \[\["pilot-amd64"' /tmp/rt_admin.txt
+          grep -q '"two"' /tmp/rt_admin.txt
+          grep -q 'outsider connected True' /tmp/rt_outsider.txt
+          grep -q 'outsider events \[\]' /tmp/rt_outsider.txt
+          grep -q 'guest CONNECT_ERROR' /tmp/rt_guest.txt
+
+      - name: "Acceptance 6: scratch restore"
+        run: |
+          set -euo pipefail
+          RUNTIME="$GITHUB_WORKSPACE/runtime"
+          C=(docker compose --env-file "$RUNTIME/payroll.env" -f deploy/vps/compose.yaml -f deploy/vps/compose.local.yaml -p ocean6-payroll-ci)
+          "${C[@]}" run --rm backup | tee /tmp/backup.log
+          BK=$(ls -d "$RUNTIME"/backups/payroll-* | tail -1)
+          cp -a "$BK" "$RUNTIME/backups/payroll_tampered"
+          printf x >> "$RUNTIME/backups/payroll_tampered/database.sql"
+          set +e
+          "${C[@]}" run --rm -e RESTORE_TARGET_DB=payroll_restore_t restore "/backup/payroll_tampered" >/tmp/tampered.log 2>&1
+          TAMPERED=$?
+          DBPASS=$(grep '^DB_ROOT_PASSWORD=' "$RUNTIME/payroll.env" | cut -d= -f2-)
+          docker exec ocean6-payroll-ci-db-1 sh -c "MYSQL_PWD='$DBPASS' mariadb -uroot -e 'CREATE DATABASE payroll_restore_existing; CREATE TABLE payroll_restore_existing.marker (id int); INSERT INTO payroll_restore_existing.marker VALUES (1);'"
+          "${C[@]}" run --rm -e RESTORE_TARGET_DB=payroll_restore_existing restore "/backup/$(basename "$BK")" >/tmp/existing.log 2>&1
+          EXISTING=$?
+          MARKER=$(docker exec ocean6-payroll-ci-db-1 sh -c "MYSQL_PWD='$DBPASS' mariadb -uroot -N -e 'select count(*) from payroll_restore_existing.marker'")
+          rm -rf /tmp/restore-dir && mkdir -p /tmp/restore-dir && echo keep > /tmp/restore-dir/marker.txt
+          "${C[@]}" run --rm -v /tmp/restore-dir:/tmp/restore-dir -e RESTORE_TARGET_DB=payroll_restore_e \
+            -e RESTORE_FILES_DIR=/tmp/restore-dir restore "/backup/$(basename "$BK")" >/tmp/existingdir.log 2>&1
+          EXISTINGDIR=$?
+          DIRMARKER=$(cat /tmp/restore-dir/marker.txt)
+          "${C[@]}" run --rm -e RESTORE_TARGET_DB=payroll_restore_ok restore "/backup/$(basename "$BK")" >/tmp/fresh.log 2>&1
+          FRESH=$?
+          set -e
+          echo "tampered=$TAMPERED existing_db=$EXISTING marker=$MARKER existing_dir=$EXISTINGDIR dirmarker=$DIRMARKER fresh=$FRESH"
+          tail -1 /tmp/fresh.log
+          [ "$TAMPERED" = 67 ] && [ "$EXISTING" = 68 ] && [ "$MARKER" = 1 ]
+          [ "$EXISTINGDIR" = 69 ] && [ "$DIRMARKER" = keep ] && [ "$FRESH" = 0 ]
+
+      - name: Stop stack
+        if: always()
+        run: |
+          RUNTIME="$GITHUB_WORKSPACE/runtime"
+          C=(docker compose --env-file "$RUNTIME/payroll.env" -f deploy/vps/compose.yaml -f deploy/vps/compose.local.yaml -p ocean6-payroll-ci)
+          docker rm -f payroll-caddy-ci >/dev/null 2>&1 || true
+          "${C[@]}" stop >/dev/null 2>&1 || true
+          "${C[@]}" logs --tail=20 web 2>&1 | tail -5 || true
 
       - name: Save image and digest
         if: always()
@@ -92,5 +291,6 @@ jobs:
           path: |
             digest.txt
             payroll-amd64-*.tar.gz
+            scenario.json
           retention-days: 7
           if-no-files-found: error

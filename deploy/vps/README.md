@@ -103,7 +103,14 @@ host, in this order of preference:
    `docker build --platform linux/amd64 -f deploy/vps/Dockerfile -t ocean6-payroll:pilot-<commit> .`
 2. **Existing GitHub Actions amd64 runner** (ubuntu-latest is native amd64):
    requires pushing the commit and approving a workflow run; upload the image as
-   a workflow artifact with `docker save`, not to a registry.
+   a workflow artifact with `docker save`, not to a registry. The manual
+   `.github/workflows/amd64-release.yml` job builds the image, then runs, on that
+   native amd64 artifact: image smoke, site setup/startup, the payroll scenario,
+   HTTPS login with `Secure`/`HttpOnly` cookie and session identity, authenticated
+   payslip PDF, private-file denial for guest and unrelated employee, queue
+   recovery across a `redis-queue` restart, user-scoped only realtime delivery
+   (after restarting `socketio`), and the scratch-restore guards (67/68/69/OK).
+   It uploads `digest.txt`, the `docker save` archive and `scenario.json`.
 3. **The Lightsail host itself** (x86_64): only after capacity readings and
    explicit approval, because the build is CPU/disk heavy and shares the host
    with Nextcloud. Do not build there while Nextcloud is in use.
