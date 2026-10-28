@@ -222,7 +222,14 @@ jobs:
               client.connect("https://payroll.localhost:8445", headers=headers,
                              namespaces=[ns], transports=["polling"], wait_timeout=15)
           except Exception as exc:
-              print(label, "CONNECT_ERROR", type(exc).__name__, str(exc)[:300],
+              text = str(exc)
+              # Distinguish a namespace authentication rejection from a transport,
+              # DNS or TLS failure: only the former proves the guard.
+              if "One or more namespaces failed to connect" in text and ns in text:
+                  kind = "NAMESPACE_REJECTED"
+              else:
+                  kind = "TRANSPORT_ERROR"
+              print(label, kind, type(exc).__name__, text[:300],
                     "| cause:", repr(exc.__cause__)[:300])
               raise SystemExit(0)
           print(label, "connected", bool(client.sid), flush=True)
@@ -233,7 +240,7 @@ jobs:
           wait_connected() {
             for _ in $(seq 1 40); do
               grep -q " connected True" "$1" 2>/dev/null && return 0
-              grep -q " CONNECT_ERROR" "$1" 2>/dev/null && { cat "$1"; return 1; }
+              grep -qE " (NAMESPACE_REJECTED|TRANSPORT_ERROR)" "$1" 2>/dev/null && { cat "$1"; return 1; }
               sleep 1
             done
             echo "timed out waiting for $1"; cat "$1" 2>/dev/null; return 1
@@ -274,7 +281,10 @@ jobs:
           echo "--- phase C: guest rejected at namespace auth"
           /tmp/sio-venv/bin/python /tmp/sio_client.py - guest > /tmp/rt_guest.txt 2>&1 || true
           cat /tmp/rt_guest.txt
-          grep -q 'guest CONNECT_ERROR' /tmp/rt_guest.txt
+          # A TLS, DNS or timeout failure must not satisfy this check.
+          grep -q 'guest NAMESPACE_REJECTED' /tmp/rt_guest.txt
+          grep -q '/payroll.localhost' /tmp/rt_guest.txt
+          ! grep -q 'guest TRANSPORT_ERROR' /tmp/rt_guest.txt
 
       - name: "Acceptance 6: scratch restore"
         run: |
@@ -331,6 +341,14 @@ jobs:
               | tee digest.txt
             docker save "$IMG" | gzip -1 > "payroll-amd64-${GITHUB_SHA::7}.tar.gz"
             sha256sum "payroll-amd64-${GITHUB_SHA::7}.tar.gz" | tee -a digest.txt
+            # The archive must load back to the same content-addressed identity;
+            # architecture and tag alone do not prove that.
+            BUILT=$(docker image inspect "$IMG" --format '{{.Id}}')
+            docker rmi "$IMG" >/dev/null
+            gunzip -c "payroll-amd64-${GITHUB_SHA::7}.tar.gz" | docker load
+            LOADED=$(docker image inspect "$IMG" --format '{{.Id}}')
+            echo "built=$BUILT loaded=$LOADED" | tee -a digest.txt
+            [ "$BUILT" = "$LOADED" ]
           else
             echo "image not built" > digest.txt
           fi

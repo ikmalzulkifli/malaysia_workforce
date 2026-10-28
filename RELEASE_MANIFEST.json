@@ -1,7 +1,7 @@
 {
   "app": "malaysia_workforce",
   "version": "1.0.0-rc.14",
-  "generated_on": "2026-10-28",
+  "generated_on": "2026-10-29",
   "file_count": 159,
   "files": [
     {
@@ -21,8 +21,8 @@
     },
     {
       "path": ".github/workflows/amd64-release.yml",
-      "size": 18591,
-      "sha256": "eb23670222df8eff016b23fec9fd25c0f7f611cb6c1efe0c17823b1f10854398"
+      "size": 19670,
+      "sha256": "ea6e59258ce1aea1f93f26f4e59b894449989a38347de87156f83ad32c25f6dc"
     },
     {
       "path": ".github/workflows/ci.yml",
@@ -61,8 +61,8 @@
     },
     {
       "path": "deploy/vps/README.md",
-      "size": 12099,
-      "sha256": "eabe7aafd2fcd609f9c65cb3670ed556450f78760065b93301eb38677c8a7941"
+      "size": 12645,
+      "sha256": "570d179d797f584e1848efcef6bd9e42ba472c91852fe06a6ad29bda318f43ed"
     },
     {
       "path": "deploy/vps/backup.sh",

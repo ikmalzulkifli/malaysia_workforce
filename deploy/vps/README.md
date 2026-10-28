@@ -123,9 +123,20 @@ docker save ocean6-payroll:pilot-<commit> | gzip > payroll-<commit>-amd64.tar.gz
 sha256sum payroll-<commit>-amd64.tar.gz
 ```
 
-Load on the host with `gunzip -c … | docker load`, confirm
-`docker image inspect --format '{{.Os}}/{{.Architecture}}'` is `linux/amd64`,
-then set `APP_IMAGE_TAG=pilot-<commit>` in `payroll.env`.
+Load on the host with `gunzip -c … | docker load`, then prove the loaded image is
+the artifact, not merely a same-named image:
+
+```bash
+sha256sum payroll-<commit>-amd64.tar.gz   # must equal the digest.txt line
+docker image inspect ocean6-payroll:pilot-<commit> --format 'id={{.Id}}'
+```
+
+The `id=` recorded by the build must equal the loaded `.Id`: Docker restores the
+saved image with its content-addressed identity, so a mismatch means the wrong
+archive, a different tag or a modified save. Investigate a mismatch instead of
+accepting a matching tag and architecture. The amd64 workflow enforces the same
+round trip (save → `docker rmi` → load → compare) before it uploads.
+Then set `APP_IMAGE_TAG=pilot-<commit>` in `payroll.env`.
 
 ## Realtime after a Redis restart
 
