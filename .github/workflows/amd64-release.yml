@@ -159,20 +159,30 @@ jobs:
           RUNTIME="$GITHUB_WORKSPACE/runtime"
           C=(docker compose --env-file "$RUNTIME/payroll.env" -f deploy/vps/compose.yaml -f deploy/vps/compose.local.yaml -p ocean6-payroll-ci)
           "${C[@]}" stop worker
+          set +e
           "${C[@]}" exec -T web gosu frappe bench --site payroll.localhost execute frappe.enqueue \
-            --kwargs '{"method":"frappe.client.set_value","queue":"default","doctype":"User","name":"Administrator","fieldname":"last_name","value":"ci-queue-ok"}' >/dev/null
+            --kwargs '{"method":"frappe.client.set_value","queue":"default","doctype":"User","name":"Administrator","fieldname":"last_name","value":"ci-queue-ok"}' > /tmp/enqueue.log 2>&1
+          ENQUEUED=$?
+          set -e
+          if [ "$ENQUEUED" != 0 ]; then
+            # The job is queued first; `bench execute` then fails to JSON-serialize
+            # the returned rq.job.Job. That exit code is not a queue failure.
+            grep -q "not JSON serializable" /tmp/enqueue.log || { cat /tmp/enqueue.log; exit 1; }
+            echo "bench execute exit=$ENQUEUED (Job serialization only; job queued)"
+          fi
           "${C[@]}" restart redis-queue
           sleep 5
           "${C[@]}" start worker
           VALUE=""
           for i in $(seq 1 20); do
             VALUE=$("${C[@]}" exec -T web gosu frappe bench --site payroll.localhost execute frappe.db.get_value \
-              --kwargs '{"doctype":"User","filters":{"name":"Administrator"},"fieldname":"last_name"}' 2>/dev/null | tail -1)
-            [ "$VALUE" = '"ci-queue-ok"' ] && break
+              --kwargs '{"doctype":"User","filters":{"name":"Administrator"},"fieldname":"last_name"}' 2>/dev/null \
+              | tail -1 | tr -d '"\r' | tr -d '[:space:]')
+            [ "$VALUE" = "ci-queue-ok" ] && break
             sleep 3
           done
           echo "queue result=$VALUE"
-          [ "$VALUE" = '"ci-queue-ok"' ]
+          [ "$VALUE" = "ci-queue-ok" ]
           echo "job ok count=$("${C[@]}" logs worker --tail=20 2>&1 | grep -c 'Job OK' || true)"
 
       - name: "Acceptance 5: user-scoped realtime"
