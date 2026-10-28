@@ -58,9 +58,9 @@ jobs:
           chmod 600 "$RUNTIME/payroll.env"
           docker network create payroll-ci-ingress >/dev/null 2>&1 || true
           C=(docker compose --env-file "$RUNTIME/payroll.env" -f deploy/vps/compose.yaml -f deploy/vps/compose.local.yaml -p ocean6-payroll-ci)
-          "${C[@]}" up -d --no-build db redis-cache redis-queue
-          "${C[@]}" run --rm --no-build setup
-          "${C[@]}" up -d --no-build web worker scheduler socketio frontend
+          "${C[@]}" up -d db redis-cache redis-queue
+          "${C[@]}" run --rm setup
+          "${C[@]}" up -d web worker scheduler socketio frontend
           for i in $(seq 1 60); do
             if curl -fsS -H 'Host: payroll.localhost' http://127.0.0.1:8088/api/method/ping >/dev/null 2>&1; then break; fi
             sleep 3
