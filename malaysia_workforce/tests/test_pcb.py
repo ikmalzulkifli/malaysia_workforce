@@ -363,3 +363,75 @@ def test_c11_epf_partial_relief_with_previous_employer_and_bonus_epf():
 	assert with_c11a.projected_epf_with_additional == d("3630.00")
 	assert without_c11a.chargeable_income_with_additional == d("17370.00")
 	assert with_c11a.chargeable_income_with_additional == d("17000.00")
+
+
+def _official_case(*, month, prior_gross, prior_epf, prior_mtd, gross, bonus, zakat):
+	"""Synthetic inputs whose Step[C] and additional MTD match a HASiL worked row."""
+	return calculate_pcb(
+		PCBInput(
+			month=month,
+			resident=True,
+			category=1,
+			current_normal_gross=d(gross),
+			current_additional_gross=d(bonus),
+			current_normal_epf=d(str(round(float(gross) * 0.11, 2))),
+			current_additional_epf=d(str(round(float(bonus) * 0.11, 2))),
+			prior_gross=d(prior_gross),
+			prior_epf_relief=d(prior_epf),
+			prior_mtd=d(prior_mtd),
+			current_zakat=d(zakat),
+		)
+	)
+
+
+def test_official_zakat_examples_reproduce_final_totals_through_calculate_pcb():
+	"""HASiL 2026 specification, section E.5(ii), rows (a)-(e), via the public calculator.
+
+	The table's components are pinned with synthetic inputs. Rows (a)/(b) use a June
+	joiner whose prior MTD leaves Step[C] at RM8.00, below the RM10 floor; rows (c)/(d)
+	use a June joiner whose prior MTD leaves Step[C] at RM15.00; row (e) is a January
+	case with Step[C] RM120.00. Bonus amounts were chosen so the additional MTD equals
+	the table's 9 / 25 / 32.55 / 127.30 / 392.25 exactly. Expected final totals are the
+	table's "MTD for current month" column: 0, 20, 27.55, 134.30, 412.25.
+	"""
+	june_low = dict(month=6, prior_gross="20000", prior_epf="2200", prior_mtd="18.00", gross="3400")
+	june_mid = dict(month=6, prior_gross="30000", prior_epf="3300", prior_mtd="1742.82", gross="5166")
+	january = dict(month=1, prior_gross="0", prior_epf="0", prior_mtd="0", gross="5166")
+
+	cases = [
+		("a", june_low, "300.00", "5.00", "0.00", "0.00", "0.00", "0.00", "0.00"),
+		("b", june_low, "832.00", "5.00", "0.00", "0.00", "25.00", "5.00", "20.00"),
+		("c", june_mid, "295.50", "20.00", "15.00", "0.00", "32.55", "5.00", "27.55"),
+		("d", june_mid, "1156.90", "8.00", "15.00", "7.00", "127.30", "0.00", "134.30"),
+		("e", january, "4028.10", "100.00", "120.00", "20.00", "392.25", "0.00", "412.25"),
+	]
+	for label, inputs, bonus, zakat, normal_before, normal_after, additional, offset, payable in cases:
+		result = _official_case(**inputs, bonus=bonus, zakat=zakat)
+		assert result.normal_mtd_before_zakat == d(normal_before), label
+		assert result.normal_mtd_after_zakat == d(normal_after), label
+		assert result.additional_mtd == d(additional), label
+		assert result.zakat_offset_additional == d(offset), label
+		assert result.payable == d(payable), label
+
+
+def test_additional_mtd_uses_unfloored_step_c_when_normal_mtd_is_below_rm10():
+	"""Step 1[E] projects the year with Step[C], not the RM10-floored amount.
+
+	Before this fix, a low earner with a bonus had the whole annual tax charged as
+	additional MTD (RM86.00 here) instead of the bonus's marginal tax.
+	"""
+	result = calculate_pcb(
+		PCBInput(
+			month=1,
+			resident=True,
+			category=1,
+			current_normal_gross=d(3700),
+			current_additional_gross=d(1000),
+			current_normal_epf=d(407),
+			current_additional_epf=d(110),
+		)
+	)
+	assert result.normal_mtd_before_zakat == d("0.00")
+	assert result.additional_mtd == d("29.60")
+	assert result.payable == d("29.60")
+	assert result.payable < result.annual_tax_with_additional

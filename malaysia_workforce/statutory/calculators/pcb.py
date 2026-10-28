@@ -179,12 +179,16 @@ def calculate_pcb(args: PCBInput) -> PCBResult:
 		(annual_tax_normal - decimal(args.prior_zakat) - decimal(args.prior_mtd)) / Decimal(13 - int(args.month))
 	)
 	normal_before_zakat = ZERO if raw_normal_before < Decimal("10") else round_up_5_sen(raw_normal_before)
+	# Step 1[E] of the 2026 specification projects the year using Step [C], the monthly
+	# MTD *before* the RM10 floor. Using the floored amount would make the additional
+	# remuneration absorb the whole annual tax whenever normal MTD falls below RM10.
+	normal_for_projection = round_up_5_sen(raw_normal_before) if raw_normal_before > ZERO else ZERO
 
 	chargeable_with_additional, projected_epf_with_additional = _annual_projection(args, include_additional=True)
 	annual_tax_with_additional = _band_tax(chargeable_with_additional, args.category, args.tax_regime)
 	additional_mtd = ZERO
 	if decimal(args.current_additional_gross) > ZERO:
-		projected_normal_mtd_year = decimal(args.prior_mtd) + normal_before_zakat * Decimal(13 - int(args.month))
+		projected_normal_mtd_year = decimal(args.prior_mtd) + normal_for_projection * Decimal(13 - int(args.month))
 		raw_additional = truncate(
 			annual_tax_with_additional
 			- projected_normal_mtd_year
