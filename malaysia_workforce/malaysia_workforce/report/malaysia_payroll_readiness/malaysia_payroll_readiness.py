@@ -3,7 +3,7 @@ from frappe import _
 
 from malaysia_workforce.payroll.events import employee_readiness
 from malaysia_workforce.payroll.profile import STATUTORY_PROFILE_FIELD, normalize_statutory_profile
-from malaysia_workforce.payroll.validation import hrd_registration_issues
+from malaysia_workforce.payroll.validation import hrd_registration_issues, missing_component_account_issues
 
 
 def execute(filters=None):
@@ -19,7 +19,9 @@ def execute(filters=None):
 		{"fieldname":"issues","label":_("What needs attention"),"fieldtype":"Data","width":500},
 	]
 	rows = []
-	company_issues = hrd_registration_issues(filters.company, filters.payroll_date)
+	company_issues = hrd_registration_issues(filters.company, filters.payroll_date) + missing_component_account_issues(
+		filters.company
+	)
 	if company_issues:
 		rows.append({"employee_name": _("Company setup"), "status": "Needs Attention",
 			"issues": " ".join(company_issues), "indicator": "red"})

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Salary Slip statutory deductions are now authoritative. The app no longer calls `calculate_net_pay()` after writing its rows (which let Salary Structure components with the same name overwrite the statutory amount) and no longer skips calculation at submission. Managed rows are rewritten on every save and again at submit, then totals and net pay are recomputed once. A Salary Structure that contains EPF Employee, SOCSO Employee, SKBBK Employee, EIS Employee, PCB or CP38 can no longer change the payslip amount.
+- Zakat is no longer an app-managed deduction. Re-appending it duplicated an Additional Salary zakat row on every save, so the employee was deducted twice while the PCB offset and filing showed one amount. The Salary Structure or Additional Salary row is left in place and used once.
+- Statutory results store each slip's own wage contribution in the new `Malaysia Statutory Result.slip_wages` field. Same-month accumulation for SOCSO, EIS and HRD Corp now uses that value instead of the cumulative monthly `wage_base`, which compounded across slips (two RM2,000 slips produced RM6,000 of wages; three produced RM14,000 and over-levied HRD Corp). Filing wage columns and the scheme breakdown use the same per-slip value. Periods filed by an earlier build keep the cumulative base; preparing such a multi-slip period now fails closed with an explanation instead of exporting a guessed wage.
+- TP1 C11 is split into C11A (voluntary EPF, RM4,000 including compulsory EPF) and C11B (life insurance/takaful or additional voluntary EPF, RM3,000). C11A relief is limited to the unused part of the RM4,000 EPF sublimit after the EPF relief already counted in P; C11B is independent. A lump-sum C11 claim is rejected at declaration save and at payroll, requiring explicit itemisation rather than an apportionment guess.
+- Payroll Readiness, Payroll Entry submission and the readiness report now name any of the six managed Salary Components that has no account for the company, instead of failing later in the accrual journal.
+- PCB helpers no longer import Frappe at module scope, so the pure test suite runs without a bench (the CI `pytest -q` job previously failed on this).
+
 ## 1.0.0-rc.14 — 2026-08-20
 
 - Rewrote the user guide as a role-first handbook (Employee, HR Manager, Accounts Manager, Auditor, System Manager) with bookmarks, a monthly checklist and a short troubleshooting table, instead of a long numbered setup manual.

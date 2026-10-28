@@ -5,7 +5,8 @@
 - EPF Third Schedule categories for supported Malaysian citizens/permanent residents and age bands.
 - SOCSO first/second category plus LINDUNG 24 Jam, which applies from 1 June 2026 and stops only from the effective date of an employee's own PERKESO Liability Release Notice. Per the official FAQ dated 13 July 2026: voluntary for local workers from 8 July 2026 and mandatory for foreign workers (Q3); declining is the only act that needs recording (Q5); June 2026 is mandatory and non-refundable (Q8); the employee bears the whole 0.75%, with no employer share (Q25).
 - EIS contribution schedule and eligibility switch.
-- LHDN resident PCB with regular/additional remuneration, TP1, TP3, zakat rebate and CP38.
+- LHDN resident PCB with regular/additional remuneration, TP1, TP3, zakat rebate and CP38. The 2026 computerised MTD formula, B values and text-file layout were checked against HASiL's "Spesifikasi Kaedah Pengiraan Berkomputer PCB 2026" (updated 1 January 2026).
+- TP1 C11 split into the two s.49(1)/(1A) sublimits: C11A voluntary EPF (RM4,000 including compulsory EPF already relieved by the formula) and C11B life insurance/takaful or additional voluntary EPF (RM3,000), total RM7,000.
 - HRD Corp 1% or 0.5% levy according to configured registration class, with the compulsory class enforced from ten Malaysian employees.
 - Minimum Wage Order effective dates.
 - Full-time ordinary hourly rate, normal overtime, rest-day, public-holiday, incomplete-month and termination-benefit primitives.
@@ -36,6 +37,17 @@ The employee release windows are enforced from the official PERKESO FAQ:
 - Final-pay orchestration, EA/e-Filing acceptance and every termination exception as an automated workflow.
 
 Unsupported cases must be handled outside automatic calculation after professional review; they must not be forced through the ordinary rule path.
+
+## Employer statutory accounting (known gap)
+
+The app calculates and reports employer EPF, SOCSO, EIS and HRD Corp amounts on every Salary Slip and in every statutory filing, but it does **not** post them to the ledger. HRMS builds its payroll accrual journal from Salary Slip earnings and deductions, and employer contributions are neither, so the payroll journal carries only employee deductions and net pay. Employer statutory cost (roughly 13-16% of payroll) is therefore absent from the P&L and the statutory liability accounts unless it is posted separately.
+
+Smallest supported approaches, pending an accounting decision:
+
+1. **Manual journal per payroll period** (recommended for now): Dr employer statutory expense / Cr EPF, PERKESO, EIS and HRD Corp payable, using the employer amounts on the period's Salary Slips or filing preparation records. The filing control totals give the amounts to reconcile against.
+2. **Customer-configured employer Salary Components** in the Salary Structure. This posts through the standard HRMS journal, but those components are calculated by HRMS formulas, not by this app, so they must be reconciled to the statutory results and will drift if rates change.
+
+Whichever is chosen, reconcile the journal to the EPF/PERKESO/HRD filing employer totals every period. Do not assume the payroll ledger already contains employer contributions.
 
 ## Source governance
 

@@ -7,6 +7,7 @@ import frappe
 from frappe import _
 from frappe.utils import get_first_day, getdate
 
+from malaysia_workforce.payroll.accumulation import accumulate, empty_context, slip_wages
 from malaysia_workforce.payroll.profile import (
 	SOCSO_EIS_PROFILE_RULE_VERSION,
 	SOCSO_EIS_LINDUNG_PROFILE,
@@ -15,6 +16,7 @@ from malaysia_workforce.payroll.profile import (
 	normalize_statutory_profile,
 	scheme_applies,
 )
+from malaysia_workforce.payroll.tax_validation import canonical_relief_code
 from malaysia_workforce.payroll.validation import (
 	hrd_registration_issues,
 	lindung_payroll_issues,
@@ -34,8 +36,11 @@ from malaysia_workforce.statutory.calculators import (
 from malaysia_workforce.statutory.common import PCBInput, ZERO, ContributionResult, decimal, money
 from malaysia_workforce.statutory.rule_pack import RULE_PACK, assert_rule_pack_covers
 
+# Deductions this app owns and rewrites on every calculation. Zakat is deliberately
+# excluded: it is an ordinary Salary Structure or Additional Salary deduction that HRMS
+# already maintains, and re-appending it here duplicated an Additional Salary zakat row.
 MANAGED_DEDUCTIONS = {
-	"EPF Employee", "SOCSO Employee", "SKBBK Employee", "EIS Employee", "PCB", "CP38", "Zakat"
+	"EPF Employee", "SOCSO Employee", "SKBBK Employee", "EIS Employee", "PCB", "CP38"
 }
 
 
@@ -118,53 +123,51 @@ def _prior_results(doc) -> dict:
 			"end_date": ["between", [year_start, doc.end_date]], "name": ["!=", doc.name or ""]},
 		fields=["name", "end_date"], order_by="end_date, name",
 	)
-	context = {
-		"prior_gross": ZERO, "prior_epf": ZERO, "prior_pcb": ZERO, "prior_zakat": ZERO,
-		"same": {key: ZERO for key in ("epf_regular", "epf_additional", "socso", "eis", "hrd", "pcb_regular", "pcb_additional")},
-		"same_employee": {key: ZERO for key in ("EPF", "SOCSO", "SKBBK", "EIS", "PCB", "CP38", "Zakat")},
-		"same_employer": {key: ZERO for key in ("EPF", "SOCSO", "EIS", "HRD Corp")},
-	}
+	context = empty_context()
 	if not slips:
 		return context
 	end_dates = {row.name: getdate(row.end_date) for row in slips}
 	rows = frappe.get_all(
 		"Malaysia Statutory Result",
 		filters={"parent": ["in", list(end_dates)], "parenttype": "Salary Slip"},
-		fields=["parent", "scheme", "wage_base", "regular_wages", "additional_wages",
+		fields=["parent", "scheme", "wage_base", "slip_wages", "per_slip_wages_recorded", "regular_wages", "additional_wages",
 			"employee_amount", "employer_amount", "extra_employee_amount"],
 	)
-	for row in rows:
-		if end_dates[row.parent] < month_start:
-			if row.scheme == "PCB":
-				context["prior_gross"] += decimal(row.regular_wages) + decimal(row.additional_wages)
-				context["prior_pcb"] += decimal(row.employee_amount)
-			elif row.scheme == "EPF":
-				context["prior_epf"] += decimal(row.employee_amount)
-			elif row.scheme == "Zakat":
-				context["prior_zakat"] += decimal(row.employee_amount)
-			continue
-		if row.scheme == "EPF":
-			context["same"]["epf_regular"] += decimal(row.regular_wages)
-			context["same"]["epf_additional"] += decimal(row.additional_wages)
-		elif row.scheme in {"SOCSO", "EIS", "HRD Corp"}:
-			context["same"][row.scheme.lower().replace(" corp", "")] += decimal(row.wage_base)
-		elif row.scheme == "PCB":
-			context["same"]["pcb_regular"] += decimal(row.regular_wages)
-			context["same"]["pcb_additional"] += decimal(row.additional_wages)
-		if row.scheme in context["same_employee"]:
-			context["same_employee"][row.scheme] += decimal(row.employee_amount)
-		if row.scheme == "SOCSO":
-			# SKBBK is carried on the SOCSO row as extra_employee_amount and is
-			# deducted as its own component, so it has to be tracked separately
-			# or a second slip in the same month double-charges it.
-			context["same_employee"]["SKBBK"] += decimal(row.extra_employee_amount)
-		if row.scheme in context["same_employer"]:
-			context["same_employer"][row.scheme] += decimal(row.employer_amount)
-	return context
+	return accumulate(context, rows, end_dates=end_dates, month_start=month_start)
+
+
+def _relief_bucket(out: dict, *, code: str, amount: Decimal, claim_month: int, month: int, declaration: str) -> None:
+	"""Accumulate one declared relief into the LHDN prior/current buckets.
+
+	C11 is split on the 2026 TP1 form into C11A (voluntary EPF, limited to RM4,000
+	*including* compulsory EPF) and C11B (life insurance/takaful and additional
+	voluntary EPF, limited to RM3,000). A lump C11 claim cannot be allocated between
+	the two sublimits without guessing, so it is rejected rather than apportioned.
+	"""
+	if code == "C11":
+		frappe.throw(
+			_("{0} claims the retired lump-sum code C11. Amend it and split the amount between C11A (voluntary EPF, RM4,000 including compulsory EPF) and C11B (life insurance/takaful or additional voluntary EPF, RM3,000) before payroll.").format(
+				declaration
+			)
+		)
+	key = "prior" if claim_month < month else "current"
+	if code == "C11A":
+		out[f"{key}_c11_epf"] += amount
+	elif code == "C11B":
+		out[f"{key}_c11_life"] += amount
+	else:
+		out[f"{key}_tp1"] += amount
 
 
 def _declarations(employee: str, company: str, year: int, month: int) -> dict[str, Decimal]:
-	out = {key: ZERO for key in ("tp3_gross", "tp3_epf", "tp3_pcb", "tp3_zakat", "tp3_reliefs", "prior_tp1", "current_tp1")}
+	out = {
+		key: ZERO
+		for key in (
+			"tp3_gross", "tp3_epf", "tp3_pcb", "tp3_zakat", "tp3_reliefs",
+			"prior_tp1", "current_tp1", "prior_c11_epf", "current_c11_epf",
+			"prior_c11_life", "current_c11_life",
+		)
+	}
 	tp3_rows = frappe.get_all(
 		"Malaysia Previous Employment TP3",
 		filters={"employee": employee, "company": company, "tax_year": year, "docstatus": 1},
@@ -183,20 +186,38 @@ def _declarations(employee: str, company: str, year: int, month: int) -> dict[st
 		for row in frappe.get_all(
 			"Malaysia Tax Relief Claim",
 			filters={"parent": ["in", [item.name for item in tp3_rows]], "parenttype": "Malaysia Previous Employment TP3"},
-			fields=["amount", "claim_month"],
+			fields=["parent", "relief_code", "amount", "claim_month"],
 		):
-			if int(row.claim_month) <= month:
-				out["tp3_reliefs"] += decimal(row.amount)
+			claim_month = int(row.claim_month or 0)
+			if claim_month <= month:
+				_relief_bucket(
+					out,
+					code=canonical_relief_code(row.relief_code),
+					amount=decimal(row.amount),
+					claim_month=claim_month,
+					month=month,
+					declaration=_("TP3 {0}").format(row.parent),
+				)
 	name = frappe.db.get_value(
 		"Malaysia Tax Declaration TP1",
 		{"employee": employee, "company": company, "tax_year": year, "docstatus": 1},
 		"name", order_by="declaration_date desc, modified desc",
 	)
 	if name:
-		for row in frappe.get_all("Malaysia Tax Relief Claim", filters={"parent": name}, fields=["amount", "claim_month"]):
-			key = "prior_tp1" if int(row.claim_month) < month else "current_tp1"
-			if int(row.claim_month) <= month:
-				out[key] += decimal(row.amount)
+		for row in frappe.get_all(
+			"Malaysia Tax Relief Claim", filters={"parent": name},
+			fields=["relief_code", "amount", "claim_month"],
+		):
+			claim_month = int(row.claim_month or 0)
+			if claim_month <= month:
+				_relief_bucket(
+					out,
+					code=canonical_relief_code(row.relief_code),
+					amount=decimal(row.amount),
+					claim_month=claim_month,
+					month=month,
+					declaration=_("TP1 {0}").format(name),
+				)
 	return out
 
 
@@ -264,10 +285,13 @@ def refresh_cp38_directive_after_submit(doc, method=None):
 	refresh_cp38_balance(row.name)
 
 
-def _result(result: ContributionResult, *, regular=ZERO, additional=ZERO) -> dict:
+def _result(result: ContributionResult, *, regular=ZERO, additional=ZERO, slip_wages=None) -> dict:
+	contribution = money(regular) + money(additional) if slip_wages is None else money(slip_wages)
 	return {
 		"scheme": result.scheme, "applicable": int(result.applicable),
-		"wage_base": float(money(result.wage_base)), "regular_wages": float(money(regular)),
+		"wage_base": float(money(result.wage_base)), "slip_wages": float(contribution),
+		"per_slip_wages_recorded": 1,
+		"regular_wages": float(money(regular)),
 		"additional_wages": float(money(additional)), "employee_amount": float(money(result.employee)),
 		"employer_amount": float(money(result.employer)), "extra_employee_amount": float(money(result.extra_employee)),
 		"category": result.category, "rule_version": result.rule_version,
@@ -293,12 +317,6 @@ def _delta(total: ContributionResult, employee=ZERO, employer=ZERO, extra=ZERO) 
 
 def apply_malaysia_statutory_calculations(doc, method=None):
 	if not frappe.db.get_value("Company", doc.company, "custom_enable_malaysia_payroll"):
-		return
-	if doc.docstatus != 0:
-		# Frappe submit() sets docstatus=1 before validate. HRMS calculate_net_pay
-		# then re-applies Salary Structure deductions; strip inapplicable ones
-		# without recalculating a submitted slip.
-		_drop_inapplicable_managed_deductions(doc, doc.get(STATUTORY_PROFILE_FIELD))
 		return
 	employee = frappe.db.get_value(
 		"Employee", doc.employee,
@@ -411,6 +429,8 @@ def apply_malaysia_statutory_calculations(doc, method=None):
 			current_normal_epf=normal_epf, current_additional_epf=additional_epf,
 			prior_optional_reliefs=declarations["tp3_reliefs"] + declarations["prior_tp1"],
 			current_optional_reliefs=declarations["current_tp1"],
+			prior_c11_epf=declarations["prior_c11_epf"], current_c11_epf=declarations["current_c11_epf"],
+			prior_c11_life=declarations["prior_c11_life"], current_c11_life=declarations["current_c11_life"],
 			prior_zakat=history["prior_zakat"] + declarations["tp3_zakat"], current_zakat=month_zakat,
 			prior_mtd=history["prior_pcb"] + declarations["tp3_pcb"], child_units=decimal(employee.custom_pcb_child_units),
 			individual_disabled=bool(employee.custom_pcb_individual_disabled), spouse_disabled=bool(employee.custom_pcb_spouse_disabled),
@@ -434,11 +454,16 @@ def apply_malaysia_statutory_calculations(doc, method=None):
 	if scheme_applies(profile, "PCB"):
 		_append_deduction(doc, "PCB", pcb.employee)
 		_append_deduction(doc, "CP38", cp38)
-		_append_deduction(doc, "Zakat", zakat)
+	else:
+		# Zakat is a salary deduction the app does not own, but a profile that excludes
+		# tax deductions must not inherit a Zakat row from a shared Salary Structure.
+		doc.set("deductions", [row for row in doc.deductions if row.salary_component != "Zakat"])
 
 	results = [
 		_result(epf, regular=current["epf_regular"], additional=current["epf_additional"]),
-		_result(socso), _result(eis), _result(hrd),
+		_result(socso, regular=current["socso"]),
+		_result(eis, regular=current["eis"]),
+		_result(hrd, regular=current["hrd"]),
 		_result(pcb, regular=current["pcb_regular"], additional=current["pcb_additional"]),
 		_result(
 			_not_applicable("CP38", current["gross"]) if not scheme_applies(profile, "CP38")
@@ -454,28 +479,14 @@ def apply_malaysia_statutory_calculations(doc, method=None):
 		doc.append("custom_malaysia_statutory_results", row)
 	doc.custom_malaysia_statutory_profile = profile
 	doc.custom_malaysia_rule_pack = RULE_PACK
-	doc.calculate_net_pay()
-	# calculate_net_pay re-applies Salary Structure deductions, including Zakat.
-	_drop_inapplicable_managed_deductions(doc, profile)
+	# HRMS has already calculated the slip (including Salary Structure components) before
+	# this hook runs. Calling calculate_net_pay() again would re-apply structure components
+	# that share a managed name and silently replace the statutory amounts, so only the
+	# totals are recomputed here.
+	doc.set_net_pay()
 	doc.compute_year_to_date()
 	doc.compute_month_to_date()
 	doc.compute_component_wise_year_to_date()
-
-
-def _drop_inapplicable_managed_deductions(doc, profile) -> None:
-	blocked = set()
-	if not scheme_applies(profile, "EPF"):
-		blocked.add("EPF Employee")
-	if not scheme_applies(profile, "PCB"):
-		blocked.update({"PCB", "CP38", "Zakat"})
-	if not blocked:
-		return
-	remaining = [row for row in doc.deductions if row.salary_component not in blocked]
-	if len(remaining) == len(doc.deductions):
-		return
-	doc.set("deductions", remaining)
-	if hasattr(doc, "set_net_pay"):
-		doc.set_net_pay()
 
 
 def validate_statutory_profile_snapshot(doc, method=None):

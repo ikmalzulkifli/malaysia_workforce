@@ -63,8 +63,8 @@ def _result_rows(filing) -> list:
 	parents = {row.name: row for row in slips}
 	results = frappe.get_all(
 		"Malaysia Statutory Result", filters={"parent": ["in", list(parents)], "parenttype": "Salary Slip"},
-		fields=["parent", "scheme", "wage_base", "regular_wages", "additional_wages", "employee_amount",
-			"employer_amount", "extra_employee_amount", "applicable", "rule_version"],
+		fields=["parent", "scheme", "wage_base", "slip_wages", "per_slip_wages_recorded", "regular_wages", "additional_wages",
+			"employee_amount", "employer_amount", "extra_employee_amount", "applicable", "rule_version"],
 		order_by="parent, scheme, name",
 	)
 	return [
@@ -121,6 +121,35 @@ def _source_payload(filing, company_identity: dict, items: list[dict]) -> dict:
 	}
 
 
+WAGE_SCHEME_BY_AUTHORITY = {
+	"EPF": "EPF",
+	"PERKESO": "SOCSO",
+	"LHDN": "PCB",
+	"HRD Corp": "HRD Corp",
+}
+
+
+def _per_slip_wages(row, duplicate_keys: set[tuple[str, str]]) -> Decimal:
+	"""Wage contributed by one slip, never the cumulative month base.
+
+	Rows written before slip_wages existed only carry the cumulative month base. That is
+	usable when the employee has a single slip for the scheme in the period, and
+	ambiguous otherwise, so a multi-slip legacy period fails closed instead of guessing.
+	"""
+	if row.get("per_slip_wages_recorded"):
+		return Decimal(str(row["slip_wages"] or 0))
+	base = Decimal(str(row["wage_base"] or 0))
+	if base and (row["employee"], row["scheme"]) in duplicate_keys:
+		frappe.throw(
+			_(
+				"Salary Slip {0} was calculated by an earlier build that stored only the cumulative monthly wage base. "
+				"{1} has more than one {2} slip in this period, so the authority wage cannot be derived without guessing. "
+				"Amend the affected slips (or prepare a single-slip period) before preparing this filing."
+			).format(row["parent"], row["employee"], row["scheme"])
+		)
+	return base
+
+
 def _aggregate(filing) -> tuple[list[dict], str, dict]:
 	rows = [
 		row
@@ -131,6 +160,10 @@ def _aggregate(filing) -> tuple[list[dict], str, dict]:
 	]
 	if not rows:
 		frappe.throw(_("No applicable {0} statutory results exist in this period.").format(filing.authority))
+	counts: dict[tuple[str, str], int] = defaultdict(int)
+	for row in rows:
+		counts[(row["employee"], row["scheme"])] += 1
+	duplicate_keys = {key for key, count in counts.items() if count > 1}
 	items: dict[str, dict] = {}
 	for row in rows:
 		item = items.setdefault(row["employee"], {"employee": row["employee"], "employee_name": row["employee_name"],
@@ -139,7 +172,7 @@ def _aggregate(filing) -> tuple[list[dict], str, dict]:
 			"additional_amount": Decimal("0"), "versions": set(), "schemes": defaultdict(lambda: {"wages": Decimal("0"),
 				"employee": Decimal("0"), "employer": Decimal("0"), "extra": Decimal("0")})})
 		bucket = item["schemes"][row["scheme"]]
-		bucket["wages"] += Decimal(str(row["wage_base"] or 0))
+		bucket["wages"] += _per_slip_wages(row, duplicate_keys)
 		bucket["employee"] += Decimal(str(row["employee_amount"] or 0))
 		bucket["employer"] += Decimal(str(row["employer_amount"] or 0))
 		bucket["extra"] += Decimal(str(row["extra_employee_amount"] or 0))
@@ -147,10 +180,9 @@ def _aggregate(filing) -> tuple[list[dict], str, dict]:
 		item["employer_amount"] += Decimal(str(row["employer_amount"] or 0))
 		item["additional_amount"] += Decimal(str(row["extra_employee_amount"] or 0))
 		item["versions"].add(row["rule_version"] or "")
-	if filing.authority == "PERKESO":
-		for item in items.values(): item["wages"] = item["schemes"]["SOCSO"]["wages"]
-	else:
-		for item in items.values(): item["wages"] = max((value["wages"] for value in item["schemes"].values()), default=Decimal("0"))
+	wage_scheme = WAGE_SCHEME_BY_AUTHORITY.get(filing.authority)
+	for item in items.values():
+		item["wages"] = item["schemes"].get(wage_scheme, {}).get("wages", Decimal("0"))
 	item_rows = list(items.values())
 	for item in item_rows:
 		item["identity"] = dict(_employee(item["employee"]) or {})
@@ -270,15 +302,27 @@ def scheme_breakdown(filing) -> dict[str, dict[str, Decimal]]:
 	rows = frappe.get_all(
 		"Malaysia Statutory Result",
 		filters={"parent": ["in", slips], "parenttype": "Salary Slip", "scheme": ["in", list(_schemes(filing))], "applicable": 1},
-		fields=["scheme", "wage_base", "employee_amount", "employer_amount", "extra_employee_amount"],
+		fields=["parent", "scheme", "wage_base", "slip_wages", "per_slip_wages_recorded", "employee_amount", "employer_amount", "extra_employee_amount"],
 	)
+	slip_employee = {
+		name: employee
+		for name, employee in frappe.get_all(
+			"Salary Slip", filters={"name": ["in", slips]}, fields=["name", "employee"], as_list=True
+		)
+	}
+	counts: dict[tuple[str, str], int] = defaultdict(int)
+	for row in rows:
+		counts[(slip_employee.get(row.parent), row.scheme)] += 1
+	duplicate_keys = {key for key, count in counts.items() if count > 1}
+	for row in rows:
+		row["employee"] = slip_employee.get(row.parent)
 	breakdown: dict[str, dict[str, Decimal]] = {}
 	for row in rows:
 		bucket = breakdown.setdefault(row.scheme, {
 			"wage_base": Decimal("0"), "employee_amount": Decimal("0"),
 			"employer_amount": Decimal("0"), "extra_employee_amount": Decimal("0"),
 		})
-		bucket["wage_base"] += Decimal(str(row.wage_base or 0))
+		bucket["wage_base"] += _per_slip_wages(row, duplicate_keys)
 		bucket["employee_amount"] += Decimal(str(row.employee_amount or 0))
 		bucket["employer_amount"] += Decimal(str(row.employer_amount or 0))
 		bucket["extra_employee_amount"] += Decimal(str(row.extra_employee_amount or 0))

@@ -13,7 +13,8 @@ Payslip PDF downloads use Frappe's standard renderer selection: `wkhtmltopdf`
 when available, otherwise the native headless-Chrome renderer. Treat a failed
 PDF as an infrastructure alert and check the renderer binary and worker logs;
 it does not change the stored Salary Slip calculation.
-7. Continue with the bank's approved payment procedure. This app does not transmit money.
+7. Post the employer statutory cost for the period (EPF, SOCSO, EIS, HRD Corp) as a separate journal, or maintain reconciled employer Salary Components. The payroll accrual journal does not include employer contributions; see `LEGAL_AND_STATUTORY.md`, "Employer statutory accounting".
+8. Continue with the bank's approved payment procedure. This app does not transmit money.
 
 ## Overtime and special days
 

@@ -7,6 +7,7 @@ import frappe
 from frappe import _
 from frappe.utils import formatdate, getdate
 
+from malaysia_workforce.payroll.tax_validation import pcb_category_number
 from malaysia_workforce.payroll.profile import (
 	SOCSO_EIS_LINDUNG_PROFILE,
 	STANDARD_PAYROLL_PROFILE,
@@ -66,16 +67,6 @@ def validate_employee(doc, method=None):
 	issues = lindung_release_issues(doc)
 	if issues:
 		frappe.throw("<br>".join(issues))
-
-
-def pcb_category_number(value) -> int:
-	"""Return LHDN PCB category 1, 2 or 3 from either a stored code or a labelled option."""
-	head = str(value or "1").strip().split(None, 1)[0].split("-", 1)[0]
-	try:
-		number = int(head)
-	except (TypeError, ValueError):
-		number = 0
-	return number if number in (1, 2, 3) else 1
 
 
 def required_identity_field_issues(employee, profile: str) -> list[str]:
@@ -177,6 +168,28 @@ def pcb_gate_issues(employee, profile: str, on_date) -> list[str]:
 		issues.append(
 			_("PCB for a leaver is outside the reviewed phase 1 scope. The annual projection cannot assume continued employment through December.")
 		)
+	return issues
+
+
+# Deductions this app creates and rewrites. Each needs a company account before the
+# Payroll Entry accrual journal can post; without one HRMS aborts the submission.
+MANAGED_SALARY_COMPONENTS = (
+	"EPF Employee", "SOCSO Employee", "SKBBK Employee", "EIS Employee", "PCB", "CP38"
+)
+
+
+def missing_component_account_issues(company: str) -> list[str]:
+	"""Name every managed component that has no account for this company."""
+	issues: list[str] = []
+	for component in MANAGED_SALARY_COMPONENTS:
+		if not frappe.db.exists("Salary Component", component):
+			continue
+		if not frappe.db.exists("Salary Component Account", {"parent": component, "company": company}):
+			issues.append(
+				_("Salary Component {0} has no account for company {1}. Set it before payroll so the accrual journal can post.").format(
+					component, company
+				)
+			)
 	return issues
 
 

@@ -19,7 +19,7 @@
    "fieldtype": "Select",
    "label": "Relief Code",
    "reqd": 1,
-   "options": "\nC1\nC2\nC3\nC4\nC5\nC6\nC7\nC8\nC9\nC10\nC11\nC12\nC13\nC14\nC15\nC16A\nC16B\nC17",
+   "options": "\nC1\nC2\nC3\nC4\nC5\nC6\nC7\nC8\nC9\nC10\nC11A\nC11B\nC12\nC13\nC14\nC15\nC16A\nC16B\nC17",
    "in_list_view": 1
   },
   {

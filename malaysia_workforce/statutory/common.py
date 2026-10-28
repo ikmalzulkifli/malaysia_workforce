@@ -84,8 +84,16 @@ class PCBInput:
 	prior_epf_relief: Decimal = ZERO
 	current_normal_epf: Decimal = ZERO
 	current_additional_epf: Decimal = ZERO
+	# Optional (non-C11) reliefs already claimed before this month and in this month.
 	prior_optional_reliefs: Decimal = ZERO
 	current_optional_reliefs: Decimal = ZERO
+	# C11 sublimits, kept apart because they interact with the automatic EPF relief.
+	# C11A is voluntary EPF (RM4,000 including compulsory EPF); C11B is life insurance,
+	# takaful or additional voluntary EPF (RM3,000).
+	prior_c11_epf: Decimal = ZERO
+	prior_c11_life: Decimal = ZERO
+	current_c11_epf: Decimal = ZERO
+	current_c11_life: Decimal = ZERO
 	prior_zakat: Decimal = ZERO
 	current_zakat: Decimal = ZERO
 	prior_mtd: Decimal = ZERO

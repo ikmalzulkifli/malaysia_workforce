@@ -16,6 +16,7 @@ from malaysia_workforce.payroll.validation import (
 	epf_socso_eis_earning_component_issues,
 	hrd_registration_issues,
 	lindung_payroll_issues,
+	missing_component_account_issues,
 	required_identity_field_issues,
 	socso_eis_earning_component_issues,
 	unclassified_earning_components,
@@ -212,7 +213,7 @@ def _stale_profile_slips(payroll_entry: str) -> list[str]:
 def validate_payroll_release(doc, method=None):
 	if not frappe.db.get_value("Company", doc.company, "custom_enable_malaysia_payroll"):
 		return
-	company_issues = hrd_registration_issues(doc.company, doc.end_date)
+	company_issues = hrd_registration_issues(doc.company, doc.end_date) + missing_component_account_issues(doc.company)
 	if company_issues:
 		frappe.throw(_("Resolve the Company statutory setup before submitting this Payroll Entry:<br>{0}").format("<br>".join(company_issues)))
 	stale_slips = _stale_profile_slips(doc.name)
@@ -242,7 +243,7 @@ def check_readiness(payroll_entry: str) -> dict:
 	doc = frappe.get_doc("Payroll Entry", payroll_entry)
 	doc.check_permission("read")
 	rows = readiness(doc)
-	company_issues = hrd_registration_issues(doc.company, doc.end_date)
+	company_issues = hrd_registration_issues(doc.company, doc.end_date) + missing_component_account_issues(doc.company)
 	return {
 		"status": "Needs Attention" if company_issues or any(row["issues"] for row in rows) else ("Ready" if rows else "No Employees"),
 		"company_issues": company_issues,

@@ -148,7 +148,7 @@ def test_relief_code_accepts_codes_and_labels():
 
 
 def test_pcb_category_number_accepts_codes_and_labels():
-	from malaysia_workforce.payroll.validation import pcb_category_number
+	from malaysia_workforce.payroll.tax_validation import pcb_category_number
 
 	assert pcb_category_number("1") == 1
 	assert pcb_category_number("2 - Married, spouse not working") == 2
@@ -164,3 +164,106 @@ def test_invalid_month_rejected():
 		assert "month" in str(exc).lower()
 	else:
 		raise AssertionError("Expected ValueError")
+
+
+def _c11_input(**overrides):
+	"""Married, spouse working (category 3), no children, January, RM2,500 normal pay.
+
+	EPF RM275/month produces K = RM3,300 for the year (275 + 275 x 11), so only
+	RM700 of the RM4,000 EPF sublimit is left for a C11A claim.
+	"""
+	base = dict(
+		month=1,
+		resident=True,
+		category=3,
+		current_normal_gross=d(2500),
+		current_normal_epf=d(275),
+	)
+	base.update(overrides)
+	return PCBInput(**base)
+
+
+def test_c11_epf_claim_is_limited_to_the_unused_part_of_the_rm4000_sublimit():
+	"""RM4,000 of voluntary EPF cannot be added on top of RM3,300 of compulsory EPF relief."""
+	without_c11 = calculate_pcb(_c11_input())
+	with_full_c11a = calculate_pcb(_c11_input(current_c11_epf=d(4000)))
+
+	# P = (2,500 - 275) + (2,500 - 275) x 11 - 9,000 = 17,700 before C11.
+	assert without_c11.chargeable_income_normal == d("17700.00")
+	# Only RM4,000 - RM3,300 = RM700 may be added.
+	assert with_full_c11a.chargeable_income_normal == d("17000.00")
+
+
+def test_c11_epf_claim_below_the_remaining_sublimit_is_added_in_full():
+	result = calculate_pcb(_c11_input(current_c11_epf=d(500)))
+	assert result.chargeable_income_normal == d("17200.00")
+
+
+def test_c11_life_claim_is_independent_of_compulsory_epf_and_capped_at_rm3000():
+	# RM3,000 life insurance relief is added even though compulsory EPF already
+	# consumes its own RM4,000 sublimit.
+	result = calculate_pcb(_c11_input(current_c11_life=d(3000)))
+	assert result.chargeable_income_normal == d("14700.00")
+
+	over_claim = calculate_pcb(_c11_input(current_c11_life=d(5000)))
+	assert over_claim.chargeable_income_normal == d("14700.00")
+
+
+def test_c11_epf_claim_without_compulsory_epf_is_not_reduced():
+	"""A payroll with no EPF (for example a non-contributing category) leaves the full RM4,000."""
+	result = calculate_pcb(
+		_c11_input(current_normal_epf=d(0), current_c11_epf=d(4000), current_c11_life=d(3000))
+	)
+	# P before C11 = 2,500 + 2,500 x 11 - 9,000 = 21,000; reliefs 4,000 + 3,000.
+	assert result.chargeable_income_normal == d("14000.00")
+
+
+def test_c11_prior_and_current_claims_share_one_sublimit():
+	"""Claims made earlier in the year and this month draw on the same RM4,000 cap."""
+	without_c11 = calculate_pcb(
+		_c11_input(month=8, current_normal_gross=d(6000), current_normal_epf=d(660))
+	)
+	with_c11 = calculate_pcb(
+		_c11_input(
+			month=8,
+			current_normal_gross=d(6000),
+			current_normal_epf=d(660),
+			prior_c11_epf=d(1000),
+			current_c11_epf=d(1000),
+		)
+	)
+
+	# P = 5,340 + (6,000 - 660) x 4 - 9,000 = 17,700 before C11. Annual EPF relief is
+	# 660 + 660 x 4 = 3,300, leaving RM700 of the RM4,000 sublimit for 2,000 of claims.
+	assert without_c11.chargeable_income_normal == d("17700.00")
+	assert with_c11.chargeable_income_normal == d("17000.00")
+
+
+def test_c11_epf_claim_without_compulsory_epf_is_not_reduced():
+	"""A payroll with no EPF (for example a non-contributing category) leaves the full RM4,000."""
+	result = calculate_pcb(
+		_c11_input(current_normal_epf=d(0), current_c11_epf=d(4000), current_c11_life=d(3000))
+	)
+	# P before C11 = 2,500 + 2,500 x 11 - 9,000 = 21,000; reliefs 4,000 + 3,000.
+	assert result.chargeable_income_normal == d("14000.00")
+
+
+def test_c11_prior_and_current_claims_share_one_sublimit():
+	"""Claims made earlier in the year and this month draw on the same RM4,000 cap."""
+	without_c11 = calculate_pcb(
+		_c11_input(month=8, current_normal_gross=d(6000), current_normal_epf=d(660))
+	)
+	with_c11 = calculate_pcb(
+		_c11_input(
+			month=8,
+			current_normal_gross=d(6000),
+			current_normal_epf=d(660),
+			prior_c11_epf=d(1000),
+			current_c11_epf=d(1000),
+		)
+	)
+
+	# P = 5,340 + (6,000 - 660) x 4 - 9,000 = 17,700 before C11. Annual EPF relief is
+	# 660 + 660 x 4 = 3,300, leaving RM700 of the RM4,000 sublimit for 2,000 of claims.
+	assert without_c11.chargeable_income_normal == d("17700.00")
+	assert with_c11.chargeable_income_normal == d("17000.00")

@@ -223,7 +223,7 @@ def _employee() -> str:
 		"custom_lindung_effective_from": None,
 		"custom_lindung_evidence": None,
 		"custom_lindung_multiple_employers": 0,
-		"custom_pcb_resident": 1, "custom_pcb_category": "1", "custom_pcb_child_units": 0,
+		"custom_pcb_resident": 1, "custom_pcb_category": "1 - Single", "custom_pcb_child_units": 0,
 	}
 	if employee:
 		doc = frappe.get_doc("Employee", employee)
@@ -1465,3 +1465,336 @@ def run_statutory_profile(*, commit: bool = True) -> dict:
 	if commit:
 		frappe.db.commit()
 	return result
+
+
+# ---------------------------------------------------------------------------
+# Regression scenarios for the payroll fixes (structure overrides, zakat routes,
+# multi-slip wage bases, C11 sublimits, submission consistency, account readiness).
+# ---------------------------------------------------------------------------
+
+from decimal import Decimal as _D  # noqa: E402
+
+
+def _fix_reset() -> None:
+	"""Remove prior scenario artefacts so the scenario can be re-run.
+
+	Only drafts that include this scenario's employees are touched, so filings created
+	by other live scenarios (which may already be accepted or reconciled) are left alone.
+	"""
+	fix_employees = {
+		name
+		for name in frappe.get_all("Employee", filters={"employee_number": ["like", "MWF%"]}, pluck="name")
+	}
+	for name in frappe.get_all("Malaysia Statutory Filing", filters={"company": COMPANY, "docstatus": 0}, pluck="name"):
+		doc = frappe.get_doc("Malaysia Statutory Filing", name)
+		if fix_employees.intersection({row.employee for row in doc.employee_lines}):
+			frappe.delete_doc("Malaysia Statutory Filing", name, force=True, ignore_permissions=True)
+	for employee in fix_employees:
+		for doctype in ("Salary Slip", "Additional Salary", "Salary Structure Assignment",
+			"Malaysia Tax Declaration TP1", "Malaysia Previous Employment TP3"):
+			for name in frappe.get_all(doctype, filters={"employee": employee}, pluck="name"):
+				doc = frappe.get_doc(doctype, name)
+				if doc.docstatus == 1:
+					doc.cancel()
+				frappe.delete_doc(doctype, name, force=True, ignore_permissions=True)
+	for name in frappe.get_all("Salary Structure", filters={"name": ["like", "MW Fix%"]}, pluck="name"):
+		doc = frappe.get_doc("Salary Structure", name)
+		if doc.docstatus == 1:
+			doc.cancel()
+		frappe.delete_doc("Salary Structure", name, force=True, ignore_permissions=True)
+	frappe.db.commit()
+
+
+def _fix_employee(key: str, base: int, *, child_units: int = 0) -> str:
+	number = f"MWF{key}"
+	name = frappe.db.get_value("Employee", {"employee_number": number}, "name")
+	values = {
+		"first_name": f"Fix {key}", "last_name": "Tester", "employee_number": number,
+		"company": COMPANY, "designation": "Barista", "gender": "Female",
+		"date_of_birth": "1992-03-10", "date_of_joining": "2026-01-01", "status": "Active",
+		"custom_malaysia_citizenship_status": "Malaysian Citizen",
+		"custom_nric": f"92031014{ord(key):04d}", "custom_tax_identification_number": f"IG{ord(key):08d}",
+		"custom_epf_member_number": f"90{ord(key):06d}",
+		"custom_socso_category": "First", "custom_eis_eligible": 1,
+		"custom_lindung_participation": "Participating",
+		"custom_lindung_registration_date": None, "custom_lindung_effective_from": None,
+		"custom_lindung_evidence": None, "custom_lindung_multiple_employers": 0,
+		"custom_pcb_resident": 1, "custom_pcb_category": "1 - Single", "custom_pcb_child_units": child_units,
+	}
+	if name:
+		doc = frappe.get_doc("Employee", name)
+		doc.update(values)
+		doc.save(ignore_permissions=True)
+	else:
+		doc = frappe.get_doc({"doctype": "Employee", **values}).insert(ignore_permissions=True)
+		name = doc.name
+	if not frappe.db.exists("Contract", {"party_type": "Employee", "party_name": name, "docstatus": 1}):
+		contract = frappe.get_doc({
+			"doctype": "Contract", "party_type": "Employee", "party_name": name, "is_signed": 1,
+			"start_date": "2026-01-01", "contract_terms": "Synthetic contract for regression testing.",
+			"custom_malaysia_wage_basis": "Monthly", "custom_malaysia_work_classification": "Full-time",
+			"custom_contract_wage_rate": base, "custom_normal_hours_per_day": 8,
+			"custom_normal_hours_per_week": 45, "custom_rest_day": "Sunday", "custom_overtime_eligible": 1,
+		}).insert(ignore_permissions=True)
+		contract.submit()
+	return name
+
+
+def _fix_structure(name: str, base: int, *, managed_deduction: tuple[str, int] | None = None) -> str:
+	deductions = []
+	if managed_deduction:
+		component, amount = managed_deduction
+		deductions.append({"salary_component": component, "amount": amount})
+	doc = frappe.get_doc({
+		"doctype": "Salary Structure", "name": name, "company": COMPANY, "is_active": "Yes",
+		"payroll_frequency": "Monthly", "currency": "MYR",
+		"earnings": [{"salary_component": "MW Lean Basic Pay", "amount": base}],
+		"deductions": deductions,
+	}).insert(ignore_permissions=True)
+	doc.submit()
+	return name
+
+
+def _fix_assign(employee: str, structure: str, base: int) -> None:
+	payable, _expense = _accounts()
+	assignment = frappe.get_doc({
+		"doctype": "Salary Structure Assignment", "employee": employee, "salary_structure": structure,
+		"company": COMPANY, "from_date": "2026-01-01", "base": base, "currency": "MYR",
+		"payroll_payable_account": payable,
+	}).insert(ignore_permissions=True)
+	assignment.submit()
+
+
+def _fix_slip(employee: str, structure: str, start, end, *, submit: bool = True):
+	doc = frappe.get_doc({
+		"doctype": "Salary Slip", "employee": employee, "company": COMPANY,
+		"salary_structure": structure, "payroll_frequency": "Monthly",
+		"start_date": start, "end_date": end, "posting_date": end, "currency": "MYR",
+	}).insert(ignore_permissions=True)
+	if submit:
+		doc.submit()
+		doc.reload()
+	return doc
+
+
+def _fix_deduction(slip, component: str) -> _D:
+	return sum(
+		(_D(str(row.amount or 0)) for row in slip.deductions if row.salary_component == component),
+		_D("0"),
+	)
+
+
+def _fix_result(slip, scheme: str):
+	rows = [row for row in slip.custom_malaysia_statutory_results if row.scheme == scheme]
+	return rows[0] if rows else None
+
+
+def _fix_check(results: list, label: str, actual, expected) -> None:
+	if isinstance(actual, bool) or isinstance(expected, bool):
+		results.append({"check": label, "expected": str(bool(expected)),
+			"actual": str(bool(actual)), "ok": bool(actual) == bool(expected)})
+		return
+	actual_d = _D(str(actual if actual is not None else 0))
+	expected_d = _D(str(expected))
+	results.append({"check": label, "expected": str(expected_d), "actual": str(actual_d), "ok": actual_d == expected_d})
+
+
+def _fix_filing(authority: str, start, end):
+	filing = frappe.get_doc({
+		"doctype": "Malaysia Statutory Filing", "company": COMPANY, "authority": authority,
+		"period_start": start, "period_end": end,
+	}).insert(ignore_permissions=True)
+	from malaysia_workforce.statutory.filing import prepare_filing
+
+	prepare_filing(filing)
+	filing.reload()
+	return filing
+
+
+def _fix_line(filing, employee: str):
+	for row in filing.employee_lines:
+		if row.employee == employee:
+			return row
+	raise AssertionError(f"{employee} is missing from {filing.name}")
+
+
+def run_payroll_fixes(*, commit: bool = True) -> dict:
+	"""Behaviour checks through Salary Slip validation/submission and filing preparation.
+
+	Expected amounts come from the official EPF Third Schedule (effective 1 October 2025),
+	the PERKESO contribution table including SKBBK, the EIS schedule and the LHDN 2026
+	computerised MTD specification, not from the app's own calculators.
+	"""
+	frappe.set_user("Administrator")
+	results: list[dict] = []
+	_company()
+	_holiday_setup()
+	_fiscal_year_setup()
+	_payroll_period_setup()
+	_user(HR_MANAGER, "Maya", ("HR Manager", "HR User"))
+	if not frappe.db.exists("Gender", "Female"):
+		frappe.get_doc({"doctype": "Gender", "gender": "Female"}).insert(ignore_permissions=True)
+	if not frappe.db.exists("Designation", "Barista"):
+		frappe.get_doc({"doctype": "Designation", "designation_name": "Barista"}).insert(ignore_permissions=True)
+	frappe.db.set_single_value("Payroll Settings", "include_holidays_in_total_working_days", 1)
+	_payable, expense = _accounts()
+	_salary_component("MW Lean Basic Pay", "MWLB", treatment="Regular Remuneration", expense=expense)
+	_salary_component("MW Lean Bonus", "MWBN", treatment="Additional Remuneration", expense=expense)
+	_fix_reset()
+
+	# 1. A Salary Structure that also carries a managed statutory deduction must not
+	#    override the calculated amount (previously EPF was replaced by the structure value).
+	emp_a = _fix_employee("A", 5000)
+	_fix_assign(emp_a, _fix_structure("MW Fix A", 5000, managed_deduction=("EPF Employee", 1)), 5000)
+	slip_a = _fix_slip(emp_a, "MW Fix A", date(2026, 1, 1), date(2026, 1, 31))
+	_fix_check(results, "A EPF deduction (structure said RM1)", _fix_deduction(slip_a, "EPF Employee"), "550.00")
+	_fix_check(results, "A EPF result", _fix_result(slip_a, "EPF").employee_amount, "550.00")
+	_fix_check(results, "A EPF employer result", _fix_result(slip_a, "EPF").employer_amount, "650.00")
+	_fix_check(results, "A SOCSO deduction", _fix_deduction(slip_a, "SOCSO Employee"), "24.75")
+	# LINDUNG 24 Jam starts with the June 2026 contribution month, so January has none.
+	_fix_check(results, "A SKBBK deduction before June 2026", _fix_deduction(slip_a, "SKBBK Employee"), "0.00")
+	_fix_check(results, "A EIS deduction", _fix_deduction(slip_a, "EIS Employee"), "9.90")
+	_fix_check(results, "A PCB deduction", _fix_deduction(slip_a, "PCB"), "110.00")
+	_fix_check(results, "A net pay = gross - deductions", slip_a.net_pay,
+		_D(str(slip_a.gross_pay)) - _D(str(slip_a.total_deduction)))
+
+	# 2. Zakat supplied as an Additional Salary is deducted exactly once.
+	emp_b = _fix_employee("B", 5000)
+	_fix_assign(emp_b, _fix_structure("MW Fix B", 5000), 5000)
+	zakat = frappe.get_doc({
+		"doctype": "Additional Salary", "employee": emp_b, "company": COMPANY,
+		"salary_component": "Zakat", "amount": 100, "payroll_date": date(2026, 1, 31),
+	}).insert(ignore_permissions=True)
+	zakat.submit()
+	slip_b = _fix_slip(emp_b, "MW Fix B", date(2026, 1, 1), date(2026, 1, 31))
+	_fix_check(results, "B zakat rows", len([r for r in slip_b.deductions if r.salary_component == "Zakat"]), "1")
+	_fix_check(results, "B zakat deducted", _fix_deduction(slip_b, "Zakat"), "100.00")
+	_fix_check(results, "B zakat statutory result", _fix_result(slip_b, "Zakat").employee_amount, "100.00")
+	# MTD RM110 less the RM100 zakat deducted this month.
+	_fix_check(results, "B PCB after zakat", _fix_deduction(slip_b, "PCB"), "10.00")
+
+	# 2b. The same zakat deduction supplied through the Salary Structure is also
+	#     deducted once (the route the stock setup uses).
+	emp_g = _fix_employee("G", 5000)
+	_fix_assign(emp_g, _fix_structure("MW Fix G", 5000, managed_deduction=("Zakat", 100)), 5000)
+	slip_g = _fix_slip(emp_g, "MW Fix G", date(2026, 1, 1), date(2026, 1, 31))
+	_fix_check(results, "G structure zakat rows",
+		len([r for r in slip_g.deductions if r.salary_component == "Zakat"]), "1")
+	_fix_check(results, "G structure zakat deducted", _fix_deduction(slip_g, "Zakat"), "100.00")
+	_fix_check(results, "G PCB after structure zakat", _fix_deduction(slip_g, "PCB"), "10.00")
+
+	# 3. Two slips of RM2,000 in one month: the authority wage is RM4,000, not the
+	#    sum of the cumulative bases (RM2,000 + RM4,000 = RM6,000).
+	emp_c = _fix_employee("C", 2000)
+	_fix_assign(emp_c, _fix_structure("MW Fix C", 2000), 2000)
+	_fix_slip(emp_c, "MW Fix C", date(2026, 9, 1), date(2026, 9, 15))
+	slip_c2 = _fix_slip(emp_c, "MW Fix C", date(2026, 9, 16), date(2026, 9, 30))
+	_fix_check(results, "C month EPF employee (2 x RM2,000)",
+		_D(str(_fix_result(slip_c2, "EPF").employee_amount)) + _D("220.00"), "440.00")
+	_fix_check(results, "C month SOCSO employee",
+		_D(str(_fix_result(slip_c2, "SOCSO").employee_amount)) + _D("9.75"), "19.75")
+	_fix_check(results, "C month HRD levy",
+		_D(str(_fix_result(slip_c2, "HRD Corp").employer_amount)) + _D("20.00"), "40.00")
+
+	# 4. Three slips of RM2,000 in October: RM6,000 of wages, HRD levy RM60
+	#    (repeated accumulation used to make this RM80 and report RM14,000 of wages).
+	_fix_slip(emp_c, "MW Fix C", date(2026, 10, 1), date(2026, 10, 10))
+	_fix_slip(emp_c, "MW Fix C", date(2026, 10, 11), date(2026, 10, 20))
+	slip_c3 = _fix_slip(emp_c, "MW Fix C", date(2026, 10, 21), date(2026, 10, 31))
+	_fix_check(results, "C three-slip SOCSO employee (ceiling)",
+		_D(str(_fix_result(slip_c3, "SOCSO").employee_amount)) + _D("9.75") + _D("10.00"), "29.75")
+	_fix_check(results, "C three-slip HRD levy",
+		_D(str(_fix_result(slip_c3, "HRD Corp").employer_amount)) + _D("20.00") + _D("20.00"), "60.00")
+
+	# 5. A bonus slip in the same month keeps regular/additional wages apart, takes
+	#    the month base to RM11,000 and the SOCSO base to its RM6,000 ceiling.
+	emp_d = _fix_employee("D", 5000)
+	_fix_assign(emp_d, _fix_structure("MW Fix D", 5000), 5000)
+	_fix_slip(emp_d, "MW Fix D", date(2026, 9, 1), date(2026, 9, 15))
+	bonus = frappe.get_doc({
+		"doctype": "Additional Salary", "employee": emp_d, "company": COMPANY,
+		"salary_component": "MW Lean Bonus", "amount": 1000, "payroll_date": date(2026, 9, 20),
+	}).insert(ignore_permissions=True)
+	bonus.submit()
+	slip_d2 = _fix_slip(emp_d, "MW Fix D", date(2026, 9, 16), date(2026, 9, 30))
+	_fix_check(results, "D bonus slip EPF employee delta", _fix_result(slip_d2, "EPF").employee_amount, "660.00")
+	_fix_check(results, "D month EPF employee",
+		_D(str(_fix_result(slip_d2, "EPF").employee_amount)) + _D("550.00"), "1210.00")
+	_fix_check(results, "D bonus additional wages", _fix_result(slip_d2, "PCB").additional_wages, "1000.00")
+	_fix_check(results, "D SOCSO capped at ceiling",
+		_D(str(_fix_result(slip_d2, "SOCSO").employee_amount)) + _D("24.75"), "29.75")
+
+	# 6. Filings use each slip's own wage base.
+	perkeso_sep = _fix_filing("PERKESO", date(2026, 9, 1), date(2026, 9, 30))
+	_fix_check(results, "PERKESO Sep C wages", _fix_line(perkeso_sep, emp_c).wages, "4000.00")
+	_fix_check(results, "PERKESO Sep C employee total", _fix_line(perkeso_sep, emp_c).employee_amount, "27.65")
+	_fix_check(results, "PERKESO Sep C SKBBK", _fix_line(perkeso_sep, emp_c).additional_amount, "29.65")
+	_fix_check(results, "PERKESO Sep D wages", _fix_line(perkeso_sep, emp_d).wages, "11000.00")
+	_fix_check(results, "PERKESO Sep D employee total", _fix_line(perkeso_sep, emp_d).employee_amount, "41.65")
+	epf_sep = _fix_filing("EPF", date(2026, 9, 1), date(2026, 9, 30))
+	_fix_check(results, "EPF Sep C wages", _fix_line(epf_sep, emp_c).wages, "4000.00")
+	_fix_check(results, "EPF Sep C employee total", _fix_line(epf_sep, emp_c).employee_amount, "440.00")
+	_fix_check(results, "EPF Sep C employer total", _fix_line(epf_sep, emp_c).employer_amount, "520.00")
+	perkeso_oct = _fix_filing("PERKESO", date(2026, 10, 1), date(2026, 10, 31))
+	_fix_check(results, "PERKESO Oct three-slip wages", _fix_line(perkeso_oct, emp_c).wages, "6000.00")
+	_fix_check(results, "PERKESO Oct three-slip employee total", _fix_line(perkeso_oct, emp_c).employee_amount, "41.65")
+	hrd_oct = _fix_filing("HRD Corp", date(2026, 10, 1), date(2026, 10, 31))
+	_fix_check(results, "HRD Oct three-slip wages", _fix_line(hrd_oct, emp_c).wages, "6000.00")
+	_fix_check(results, "HRD Oct three-slip levy", _fix_line(hrd_oct, emp_c).employer_amount, "60.00")
+
+	# 7. TP1 claim month: C11B is ignored before its month, applied in it, and carried
+	#    afterwards. LHDN 2026 spec: sum-LP accumulates claims, LP1 is the claim month.
+	emp_e = _fix_employee("E", 5000)
+	_fix_assign(emp_e, _fix_structure("MW Fix E", 5000), 5000)
+	receipt = _private_file("mw-fix-c11-receipt.txt", "Synthetic C11B evidence")
+	tp1 = frappe.get_doc({
+		"doctype": "Malaysia Tax Declaration TP1", "employee": emp_e, "company": COMPANY,
+		"tax_year": 2026, "declaration_date": "2026-02-01", "employee_declaration": 1,
+		"relief_claims": [{"relief_code": "C11B", "amount": 3000, "claim_month": 2,
+			"evidence_reference": receipt}],
+	}).insert(ignore_permissions=True)
+	frappe.set_user(HR_MANAGER)
+	tp1.submit()
+	frappe.set_user("Administrator")
+	slip_e_jan = _fix_slip(emp_e, "MW Fix E", date(2026, 1, 1), date(2026, 1, 31))
+	slip_e_feb = _fix_slip(emp_e, "MW Fix E", date(2026, 2, 1), date(2026, 2, 28))
+	slip_e_mar = _fix_slip(emp_e, "MW Fix E", date(2026, 3, 1), date(2026, 3, 31))
+	_fix_check(results, "E PCB before claim month", _fix_deduction(slip_e_jan, "PCB"), "110.00")
+	_fix_check(results, "E PCB in claim month", _fix_deduction(slip_e_feb, "PCB"), "93.65")
+	_fix_check(results, "E PCB after claim month", _fix_deduction(slip_e_mar, "PCB"), "93.65")
+
+	# 8. Draft-to-submit: a tax-setting change after the draft must be reflected.
+	emp_f = _fix_employee("F", 5000)
+	_fix_assign(emp_f, _fix_structure("MW Fix F", 5000), 5000)
+	draft = _fix_slip(emp_f, "MW Fix F", date(2026, 1, 1), date(2026, 1, 31), submit=False)
+	_fix_check(results, "F draft PCB (no child units)", _fix_deduction(draft, "PCB"), "110.00")
+	frappe.db.set_value("Employee", emp_f, "custom_pcb_child_units", 1)
+	draft.reload()
+	draft.submit()
+	draft.reload()
+	_fix_check(results, "F submitted PCB after child-unit change", _fix_deduction(draft, "PCB"), "100.00")
+	_fix_check(results, "F submitted PCB result", _fix_result(draft, "PCB").employee_amount, "100.00")
+
+	# 9. Missing Salary Component accounts are reported before payroll, naming both the
+	#    component and the company (previously only the accrual journal failed).
+	from malaysia_workforce.payroll.validation import missing_component_account_issues
+
+	frappe.db.delete("Salary Component Account", {"parent": "EPF Employee", "company": COMPANY})
+	issues = missing_component_account_issues(COMPANY)
+	_fix_check(results, "Missing EPF account is reported",
+		any("EPF Employee" in issue and COMPANY in issue for issue in issues), "True")
+	payable, _expense = _accounts()
+	component = frappe.get_doc("Salary Component", "EPF Employee")
+	component.append("accounts", {"company": COMPANY, "account": payable})
+	component.save(ignore_permissions=True)
+	_fix_check(results, "Restored EPF account is accepted",
+		not any("EPF Employee" in issue for issue in missing_component_account_issues(COMPANY)), "True")
+
+	failed = [row for row in results if not row["ok"]]
+	summary = {"checks": len(results), "failed": len(failed), "results": results}
+	if failed:
+		raise AssertionError(f"payroll fix checks failed: {failed}")
+	if commit:
+		frappe.db.commit()
+	frappe.set_user("Administrator")
+	return summary

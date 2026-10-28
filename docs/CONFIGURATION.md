@@ -31,9 +31,11 @@ Use standard Salary Structure and Salary Structure Assignment for payroll amount
 
 ## 4. Salary components
 
-For every earning, select its EPF, SOCSO, EIS and HRD wage treatment, PCB treatment, and ordinary-rate treatment. Configure standard HRMS Overtime Types for normal overtime, rest-day work and public-holiday work, select the corresponding `Statutory Day Type`, and use normal Salary Components. The app creates only the deductions it owns: EPF Employee, SOCSO Employee, SKBBK Employee (the LINDUNG 24 Jam amount in the current PERKESO text specification), EIS Employee, PCB, CP38 and Zakat. Configure their Company accounts without renaming them.
+For every earning, select its EPF, SOCSO, EIS and HRD wage treatment, PCB treatment, and ordinary-rate treatment. Configure standard HRMS Overtime Types for normal overtime, rest-day work and public-holiday work, select the corresponding `Statutory Day Type`, and use normal Salary Components. The app creates only the deductions it owns: EPF Employee, SOCSO Employee, SKBBK Employee (the LINDUNG 24 Jam amount in the current PERKESO text specification), EIS Employee, PCB and CP38. Configure their Company accounts without renaming them: Payroll Readiness and Payroll Entry submission both stop and name any component that has no account for the company.
 
-Zakat remains an ordinary Salary Structure or Additional Salary deduction; the app uses it as the PCB rebate.
+Those six components are recalculated on every Salary Slip save and again at submission. If a Salary Structure also contains one of them, the structure row is replaced by the statutory amount; the structure value is never used. Keep them out of Salary Structures to avoid confusing the component list.
+
+Zakat is **not** app-owned. It stays an ordinary Salary Structure or Additional Salary deduction and is counted exactly once, both as a cash deduction and as the PCB zakat offset (provided the employee's zakat is deducted through payroll).
 
 ## 5. Tax inputs
 

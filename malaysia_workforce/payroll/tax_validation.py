@@ -31,6 +31,16 @@ def load_tp1_relief_rules(tax_year: int) -> dict[str, dict[str, Any]]:
 	return data["reliefs"]
 
 
+def pcb_category_number(value) -> int:
+	"""Return LHDN PCB category 1, 2 or 3 from either a stored code or a labelled option."""
+	head = str(value or "1").strip().split(None, 1)[0].split("-", 1)[0]
+	try:
+		number = int(head)
+	except (TypeError, ValueError):
+		number = 0
+	return number if number in (1, 2, 3) else 1
+
+
 def validate_tax_year(value: Any, current_year: int) -> int:
 	try:
 		year = int(value)
@@ -60,6 +70,12 @@ def validate_tp1_rows(rows: list[dict], *, tax_year: int) -> list[dict]:
 	cleaned = []
 	for index, row in enumerate(rows, 1):
 		code = canonical_relief_code(row.get("relief_code"))
+		if code == "C11":
+			raise ValueError(
+				f"Row {index}: C11 was split for {tax_year}. Claim voluntary EPF under C11A "
+				"(RM4,000 limit including compulsory EPF) and life insurance/takaful or additional "
+				"voluntary EPF under C11B (RM3,000). Amend the claim and select the correct sub-code."
+			)
 		if code not in rules:
 			raise ValueError(f"Row {index}: {code or 'blank'} is not a valid TP1 code for {tax_year}.")
 		amount = nonnegative_decimal(row.get("amount"), f"Row {index} amount")

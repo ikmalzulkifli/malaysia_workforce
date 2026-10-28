@@ -12,6 +12,10 @@ SPOUSE_RELIEF = Decimal("4000")
 DISABLED_INDIVIDUAL_RELIEF = Decimal("7000")
 DISABLED_SPOUSE_RELIEF = Decimal("6000")
 CHILD_UNIT_RELIEF = Decimal("2000")
+# Income Tax Act s.49(1)/(1A): EPF contributions (compulsory or voluntary) are relieved up to
+# RM4,000, life insurance/takaful and additional voluntary EPF up to RM3,000, total RM7,000.
+EPF_RELIEF_LIMIT = Decimal("4000")
+LIFE_INSURANCE_RELIEF_LIMIT = Decimal("3000")
 
 # (lower exclusive, upper inclusive, M, R, B category 1/3, B category 2)
 TAX_BANDS = (
@@ -27,8 +31,22 @@ TAX_BANDS = (
 )
 
 
-def _reliefs(args: PCBInput) -> Decimal:
+def _reliefs(args: PCBInput, epf_relief_counted: Decimal) -> Decimal:
+	"""Annual reliefs, applying the C11 sublimits to what EPF has already relieved.
+
+	C11A (voluntary EPF) is limited to RM4,000 *including* compulsory EPF, so only the
+	amount left after the EPF relief already counted in P can be added. C11B (life
+	insurance/takaful or additional voluntary EPF) is independent and limited to RM3,000.
+	A lump C11 claim is never added on top of the automatic EPF relief.
+	"""
 	spouse = SPOUSE_RELIEF if args.category == 2 else ZERO
+	c11_life = min(
+		decimal(args.prior_c11_life) + decimal(args.current_c11_life), LIFE_INSURANCE_RELIEF_LIMIT
+	)
+	c11_epf = min(
+		decimal(args.prior_c11_epf) + decimal(args.current_c11_epf),
+		max(EPF_RELIEF_LIMIT - decimal(epf_relief_counted), ZERO),
+	)
 	return (
 		INDIVIDUAL_RELIEF
 		+ spouse
@@ -37,6 +55,8 @@ def _reliefs(args: PCBInput) -> Decimal:
 		+ CHILD_UNIT_RELIEF * decimal(args.child_units)
 		+ decimal(args.prior_optional_reliefs)
 		+ decimal(args.current_optional_reliefs)
+		+ c11_life
+		+ c11_epf
 	)
 
 
@@ -87,8 +107,9 @@ def _annual_projection(args: PCBInput, *, include_additional: bool) -> tuple[Dec
 	net_current = decimal(args.current_normal_gross) - k1
 	net_future = (future_gross - k2) * Decimal(n)
 	net_additional = decimal(args.current_additional_gross) - kt if include_additional else ZERO
-	p = net_prior + net_current + net_future + net_additional - _reliefs(args)
-	return truncate(max(p, ZERO)), truncate(prior_k + k1 + kt + k2 * Decimal(n))
+	epf_relief = prior_k + k1 + kt + k2 * Decimal(n)
+	p = net_prior + net_current + net_future + net_additional - _reliefs(args, epf_relief)
+	return truncate(max(p, ZERO)), truncate(epf_relief)
 
 
 def _normal_mtd(args: PCBInput, chargeable: Decimal) -> tuple[Decimal, Decimal]:

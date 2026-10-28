@@ -8,6 +8,8 @@
   "scheme",
   "applicable",
   "wage_base",
+  "slip_wages",
+  "per_slip_wages_recorded",
   "regular_wages",
   "additional_wages",
   "employee_amount",
@@ -38,6 +40,21 @@
    "label": "Wage Base",
    "precision": "2",
    "in_list_view": 1
+  },
+  {
+   "fieldname": "slip_wages",
+   "fieldtype": "Currency",
+   "label": "Slip Wages",
+   "precision": "2",
+   "description": "Wage base contributed by this slip. The Wage Base field is the cumulative month total used for the contribution calculation."
+  },
+  {
+   "fieldname": "per_slip_wages_recorded",
+   "fieldtype": "Check",
+   "label": "Per-slip Wages Recorded",
+   "default": "0",
+   "read_only": 1,
+   "description": "Set for rows written after the per-slip wage fix. Unset rows are legacy and fall back to the cumulative base only when a single slip exists for the scheme and period."
   },
   {
    "fieldname": "regular_wages",
