@@ -283,8 +283,10 @@ jobs:
           C=(docker compose --env-file "$RUNTIME/payroll.env" -f deploy/vps/compose.yaml -f deploy/vps/compose.local.yaml -p ocean6-payroll-ci)
           "${C[@]}" run --rm backup | tee /tmp/backup.log
           BK=$(ls -d "$RUNTIME"/backups/payroll-* | tail -1)
-          cp -a "$BK" "$RUNTIME/backups/payroll_tampered"
-          printf x >> "$RUNTIME/backups/payroll_tampered/database.sql"
+          # The backup service writes root-owned 0700 snapshots, as it does on the
+          # host; prepare the tampered copy with the same privileges.
+          sudo cp -a "$BK" "$RUNTIME/backups/payroll_tampered"
+          sudo sh -c "printf x >> '$RUNTIME/backups/payroll_tampered/database.sql'"
           set +e
           "${C[@]}" run --rm -e RESTORE_TARGET_DB=payroll_restore_t restore "/backup/payroll_tampered" >/tmp/tampered.log 2>&1
           TAMPERED=$?
