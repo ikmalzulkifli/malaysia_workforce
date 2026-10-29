@@ -120,3 +120,320 @@ html[data-ocean6-brand] .grid-row {
     min-height: 44px;
   }
 }
+
+/* Login and recovery shell; native Frappe forms and messages remain in place. */
+html[data-ocean6-brand] .page-content-wrapper:has(.ocean6-auth-shell) {
+  background: #f2f0ea;
+  min-height: 100vh;
+  padding: 40px 24px;
+}
+
+html[data-ocean6-brand] .page-content-wrapper:has(.ocean6-auth-shell) > main.container {
+  width: 100%;
+  max-width: 1280px;
+  padding: 0;
+}
+
+html[data-ocean6-brand] .ocean6-auth-shell {
+  display: grid;
+  grid-template-columns: 56% 44%;
+  min-height: min(820px, calc(100vh - 80px));
+  overflow: hidden;
+  border-radius: 16px;
+  background: #fffefb;
+  box-shadow: 0 18px 48px rgba(18, 18, 18, .09);
+}
+
+html[data-ocean6-brand] .ocean6-auth-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: clamp(36px, 5vw, 64px);
+  color: #fff;
+  background: url('/assets/malaysia_workforce/images/ocean6/waves.svg') center bottom / 100% auto no-repeat, linear-gradient(135deg, #79000e, #bd0018 70%, #79000e);
+}
+
+html[data-ocean6-brand] .ocean6-auth-logo {
+  display: block;
+  width: 148px;
+  height: auto;
+  filter: brightness(0) invert(1);
+}
+
+html[data-ocean6-brand] .ocean6-auth-product {
+  margin: 54px 0 14px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+}
+
+html[data-ocean6-brand] .ocean6-auth-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 56px clamp(24px, 5vw, 70px);
+}
+
+html[data-ocean6-brand] .ocean6-auth-content > div {
+  width: 100%;
+}
+
+html[data-ocean6-brand] .ocean6-auth-content .login-content.page-card {
+  width: 100%;
+  max-width: 420px;
+  min-height: 0;
+  margin: 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* The hero supplies the accessible brand mark in place of the repeated card mark. */
+html[data-ocean6-brand] .ocean6-auth-content .page-card-head .app-logo {
+  display: none;
+}
+
+html[data-ocean6-brand] .ocean6-auth-content .page-card-head {
+  text-align: left;
+}
+
+html[data-ocean6-brand] .ocean6-auth-content .form-control {
+  min-height: 52px;
+  border: 1px solid #9d9a94;
+  border-radius: 7px;
+  background: #fff;
+}
+
+html[data-ocean6-brand] .ocean6-auth-content .btn {
+  min-height: 48px;
+  border-radius: 7px;
+}
+
+html[data-ocean6-brand] .ocean6-auth-content .btn-login:not(.btn-login-option):not(:disabled):not(.disabled):not([aria-disabled="true"]),
+html[data-ocean6-brand] .ocean6-auth-content #update:not(:disabled):not(.disabled):not([aria-disabled="true"]) {
+  color: #fff;
+  background: #c51f2a;
+  border-color: #c51f2a;
+}
+
+html[data-ocean6-brand] .ocean6-auth-content .btn-login:not(.btn-login-option):not(:disabled):not(.disabled):not([aria-disabled="true"]):hover,
+html[data-ocean6-brand] .ocean6-auth-content #update:not(:disabled):not(.disabled):not([aria-disabled="true"]):hover {
+  background: #991923;
+  border-color: #991923;
+}
+
+html[data-ocean6-brand] .ocean6-auth-content .form-control:focus-visible {
+  outline: 2px solid #c51f2a;
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+@media (max-width: 767px) {
+  html[data-ocean6-brand] .page-content-wrapper:has(.ocean6-auth-shell) {
+    padding: 0;
+  }
+
+  html[data-ocean6-brand] .ocean6-auth-shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    min-height: 100vh;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  html[data-ocean6-brand] .ocean6-auth-hero {
+    min-height: 250px;
+    padding: 24px 28px 32px;
+  }
+
+  html[data-ocean6-brand] .ocean6-auth-logo {
+    width: 90px;
+  }
+
+  html[data-ocean6-brand] .ocean6-auth-product {
+    margin: 20px 0 8px;
+    font-size: 11px;
+  }
+
+  html[data-ocean6-brand] .ocean6-auth-content {
+    align-items: flex-start;
+    padding: 32px 24px 48px;
+  }
+}
+
+html[data-ocean6-brand][data-theme="dark"] .page-content-wrapper:has(.ocean6-auth-shell) {
+  background: #171717;
+}
+
+html[data-ocean6-brand][data-theme="dark"] .ocean6-auth-shell {
+  background: #242424;
+}
+
+html[data-ocean6-brand][data-theme="dark"] .ocean6-auth-content .form-control {
+  color: #f5f3ee;
+  background: #303030;
+  border-color: #77736c;
+}
+
+html[data-ocean6-brand][data-theme="dark"] .ocean6-auth-content .form-control:focus-visible {
+  outline-color: #f07880;
+}
+
+/* Product identity, without importing unrelated slogans or login methods. */
+html[data-ocean6-brand] .ocean6-auth-product {
+ margin: 54px 0 0;
+ font-size: clamp(40px, 4.5vw, 68px);
+ font-weight: 700;
+ letter-spacing: -.03em;
+ text-transform: none;
+ line-height: 1.08;
+}
+html[data-ocean6-brand] .body-sidebar,
+html[data-ocean6-brand] .layout-side-section {
+ background-color: var(--bg-color);
+}
+html[data-ocean6-brand] .standard-sidebar-item.selected {
+ background-color: var(--control-bg);
+}
+html[data-ocean6-brand] .form-tabs-list {
+ overflow-x: auto;
+ scroll-padding-inline: 1rem;
+}
+html[data-ocean6-brand] .form-tabs-list .nav-link {
+ white-space: nowrap;
+ flex-shrink: 0;
+}
+html[data-ocean6-brand] .ocean6-auth-content .for-forgot .btn,
+html[data-ocean6-brand] .ocean6-auth-content .for-login-with-email-link .btn {
+ min-height: 48px;
+}
+html[data-ocean6-brand] ion-header .bg-white,
+html[data-ocean6-brand] ion-tab-bar {
+ background-color: var(--fg-color);
+}
+html[data-ocean6-brand] ion-content .bg-white {
+ background-color: var(--fg-color);
+}
+html[data-ocean6-brand] ion-content button.bg-gray-900:not(:disabled),
+html[data-ocean6-brand] ion-content a.bg-gray-900 {
+ background-color: #c51f2a;
+ color: white;
+}
+@media (max-width: 767px) {
+ html[data-ocean6-brand] .ocean6-auth-hero { min-height: 220px; }
+ html[data-ocean6-brand] .ocean6-auth-product { margin-top: 20px; font-size: 36px; }
+}
+
+html[data-ocean6-brand] .ocean6-hrms-login {
+  display: grid;
+  grid-template-columns: minmax(0, 56fr) minmax(0, 44fr);
+  align-items: center;
+  background: #fffefb;
+}
+
+html[data-ocean6-brand] .ocean6-hrms-login-brand {
+  align-self: stretch;
+  width: 100%;
+  margin: 0;
+  padding: clamp(36px, 5vw, 64px);
+  align-items: flex-start;
+  justify-content: center;
+  background: url('/assets/malaysia_workforce/images/ocean6/waves.svg') center bottom / 100% auto no-repeat, linear-gradient(135deg, #79000e, #bd0018 70%, #79000e);
+}
+
+html[data-ocean6-brand] .ocean6-hrms-login-brand img {
+  width: min(200px, 70%);
+  height: auto;
+  filter: brightness(0) invert(1);
+}
+
+html[data-ocean6-brand] .ocean6-hrms-login-brand > div {
+  color: #fff;
+  text-align: left;
+  font-size: clamp(36px, 4vw, 64px);
+}
+
+html[data-ocean6-brand] .ocean6-hrms-login > .mx-auto.mt-10 {
+  margin-top: 0;
+}
+
+@media (max-width: 767px) {
+  html[data-ocean6-brand] .ocean6-hrms-login {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    height: auto;
+    min-height: 100vh;
+    align-items: start;
+  }
+
+  html[data-ocean6-brand] .ocean6-hrms-login-brand {
+    min-height: 210px;
+    padding: 28px;
+    justify-content: center;
+  }
+
+  html[data-ocean6-brand] .ocean6-hrms-login-brand img {
+    width: 140px;
+  }
+
+  html[data-ocean6-brand] .ocean6-hrms-login-brand > div {
+    font-size: 32px;
+  }
+
+  html[data-ocean6-brand] .ocean6-hrms-login > .mx-auto.mt-10 {
+    padding-top: 32px;
+    padding-bottom: 48px;
+  }
+}
+
+html[data-ocean6-brand] .ocean6-auth-product { color: #fff; }
+
+html[data-ocean6-brand] .ocean6-hrms-login input:not([type="checkbox"]),
+html[data-ocean6-brand] .ocean6-hrms-login button {
+ min-height: 44px;
+}
+html[data-ocean6-brand] .form-tabs-list {
+ scrollbar-width: thin;
+ scrollbar-color: var(--text-muted) var(--control-bg);
+}
+html[data-ocean6-brand] .form-tabs-list::-webkit-scrollbar { height: 6px; }
+html[data-ocean6-brand] .form-tabs-list::-webkit-scrollbar-thumb {
+ background: var(--text-muted);
+ border-radius: 3px;
+}
+
+html[data-ocean6-brand] .ocean6-hrms-login .ocean6-email-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin-top: 16px;
+  padding: 8px 12px;
+  border: 1px solid #aaa69e;
+  border-radius: 6px;
+  color: #121212;
+  text-align: center;
+  text-decoration: none;
+}
+
+html[data-ocean6-brand] .ocean6-hrms-login .ocean6-hrms-login-submit:not(:disabled):not([aria-disabled="true"]) {
+  background-color: #c51f2a;
+  color: #fff;
+}
+
+html[data-ocean6-brand] .ocean6-hrms-login .ocean6-hrms-login-submit:not(:disabled):not([aria-disabled="true"]):hover {
+  background-color: #991923;
+}
+
+/* Native Frappe UI gray/solid primary variant; danger variants keep their colors. */
+html[data-ocean6-brand] ion-content button.bg-surface-gray-7:not(:disabled):not([aria-disabled="true"]) {
+ background-color: #c51f2a;
+ color: #fff;
+}
+html[data-ocean6-brand] ion-content button.bg-surface-gray-7:not(:disabled):not([aria-disabled="true"]):hover {
+ background-color: #991923;
+}

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 550" preserveAspectRatio="none">
+  <defs>
+    <linearGradient id="a" x2=".6" y2="1"><stop stop-color="#ff293b"/><stop offset=".5" stop-color="#d00b21"/><stop offset="1" stop-color="#79000e"/></linearGradient>
+    <linearGradient id="b" x2=".3" y2="1"><stop stop-color="#f32134"/><stop offset=".3" stop-color="#b60016"/><stop offset="1" stop-color="#75000b"/></linearGradient>
+    <linearGradient id="c" x2=".2" y2="1"><stop stop-color="#ff3041"/><stop offset=".35" stop-color="#d30720"/><stop offset="1" stop-color="#870012"/></linearGradient>
+  </defs>
+  <path d="M0 185 C180 215 190 350 370 325 S650 80 800 125 V550 H0Z" fill="url(#a)"/>
+  <path d="M0 186 C180 216 190 351 370 326 S650 81 800 126" fill="none" stroke="#ff7180" stroke-opacity=".35" stroke-width="2"/>
+  <path d="M0 240 C190 205 265 460 475 355 S690 200 800 220 V550 H0Z" fill="url(#b)"/>
+  <path d="M0 385 C220 145 360 490 800 385 V550 H0Z" fill="url(#c)"/>
+  <path d="M0 386 C220 146 360 491 800 386" fill="none" stroke="#ff6374" stroke-opacity=".45" stroke-width="2"/>
+  <path d="M0 425 C210 275 290 430 470 458 S685 465 800 497 V550 H0Z" fill="url(#b)"/>
+</svg>

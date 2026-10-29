@@ -1,84 +1,157 @@
-# Ocean 6 site branding
+# Ocean 6 HR branding
 
-Ocean 6 branding is optional presentation for the existing Malaysia Payroll app.
-It preserves native Frappe/ERPNext/HRMS screens, actions, permissions, calculations,
-module identity, statutory warnings and legal notices. The generic app remains
-unbranded unless the individual site explicitly sets `ocean6_branding` to numeric
-`1` (JSON `true` also works).
+This optional presentation layer preserves native Frappe/ERPNext/HRMS records,
+permissions, calculations, routes, authentication and statutory/legal notices.
+The site must explicitly set JSON numeric `ocean6_branding=1` (or `true`).
+Opting out restores the native identity and auth composition, including when
+shared HRMS bundles were built with this app's conditional identity patch.
 
-## Implementation
+## Presentation boundaries
 
-- `branding.py`: native boot navbar and payroll desktop-icon data; website logo,
-  favicon and asset inclusion. Existing website head content is retained.
-- `branding_renderer.py`: supported `page_renderer` extension, selected only for
-  the opted-in `hrms` endpoint. It adds the app's assets to the installed HRMS
-  template source. The upstream controller, CSRF boot, manifest, compiled asset
-  hashes and authentication remain authoritative. No vendor template is copied.
-- `public/css/ocean6.css`: every selector is scoped to `html[data-ocean6-brand]`.
-  Native variables cover Desk and web forms; Ionic variables cover HRMS.
-- `public/js/ocean6.js`: enables that attribute only from the server's site opt-in.
-  It does not call APIs, observe the DOM, change navigation, or replace text.
-- Versioned asset URLs prevent an older stylesheet persisting in browser caches.
-  Bump both hook and website-head URLs when changing these assets.
+- `branding.py` uses native boot/navbar/payroll-icon data and website context.
+  Auth child templates extend the installed login and password pages and wrap
+  `super()`; original forms, recovery, validation, email-link controls and scripts
+  remain authoritative. The red wave panel uses approved Ocean 6 artwork.
+- `branding_renderer.py` extends only the standalone HRMS document's identity
+  metadata. Browser/Apple titles, favicon/touch icon, theme color, manifest link
+  and splash URLs are branded. Boot/CSRF, compiled script URLs and routes remain.
+- The enabled-only `/ocean6-hr.webmanifest` returns `application/manifest+json`
+  with `Cache-Control: no-cache`. It clones the built native manifest, retaining
+  start URL, scope, ID semantics and display mode, and changes identity fields
+  and icon URLs only. Opt-out makes this endpoint unavailable (404).
+- All custom CSS is scoped to `html[data-ocean6-brand]`. Operational light tokens
+  are warm `#F2F0EA`, ivory `#FFFEFB`, ink `#121212`, muted `#66645E`, border
+  `#DDD8CD`, primary `#C51F2A` and hover `#991923`. Avenir Next/Helvetica Neue/system
+  sans fallbacks retain native icon/code fonts. Native semantic statuses remain.
+- The tiny `public/js/ocean6.js` only sets server-provided brand and email-link
+  visibility attributes. It has no observer, text rewriting, API or auth logic.
+  Desk keeps descriptive native route titles such as Malaysia Payroll; auth and
+  HRMS use Ocean 6 HR titles and branded favicons.
+- HRMS Login with Email Link is visible only when branding and the existing
+  `System Settings.login_with_email_link` Check are enabled. It navigates to
+  `/login?redirect-to=%2Fhrms%2Fhome#login-with-email-link`. No auth method is added:
+  native Frappe validation, mail policy and post-email-login home/role routing
+  remain unchanged. The query is preserved at the form; no custom post-token
+  redirect is implemented or claimed. Password-disabled/email-only configurations
+  no longer display an inaccurate no-login-methods message in the branded shell.
 
-## Brand system
+## Explicit narrow HRMS build patch
 
-The operational UI uses Avenir Next, Helvetica Neue and system sans fallbacks.
-Light surfaces use warm `#F2F0EA`, ivory `#FFFEFB`, ink `#121212`, muted `#66645E`,
-and border `#DDD8CD`; primary actions use `#C51F2A` and hover `#991923`.
-The original logo artwork keeps its own red. Dark-mode preferences remain native;
-the theme supplies contrasting dark action colors rather than forcing light mode.
-Native success, warning, error, disabled and workflow status semantics remain.
+Pinned HRMS 16.16.0 offers no runtime hook for its Vue product headings or install
+prompt. `build_hrms.mjs` is an app-owned Vite **source transform at compilation**,
+not a runtime DOM replacement and not a vendor-source edit. It targets exactly:
 
-At 390px, login and native form controls have 44px minimum height. Existing mobile
-navigation and contained report-table scrolling remain native. No dashboards,
-financial figures, workflows, access-request controls or permission rules are added.
+```text
+frontend/src/components/BaseLayout.vue
+frontend/src/components/InstallPrompt.vue
+frontend/src/views/Login.vue
+```
 
-The two PNGs under `public/images/ocean6/` are byte-for-byte copies of the approved
-MCN assets `apps/backend/public/images/brand/ocean6-banner.png` (wordmark.png) and
-`ocean6-icon.png` (icon.png). MCN was read only. Source originals and usage guidance
-are retained in that repository's `brand/ocean6/`. Do not distort the logo or use
-the banner as a narrow app icon. Ocean 6 artwork is a brand asset, not a change to
-the app's GPL-3.0-or-later licensing or upstream notices.
+Exact expected fragments/counts must match or the build fails. Explicit Vue setup
+bindings select Ocean 6 HR headings, actual logos, the install label and existing
+email-link entry point when opted in; native branches remain when opted out.
+Forms, handlers, OTP/provider behavior, permissions, notifications and routing are
+not replaced. Vue compiler tests verify setup bindings and native fallbacks.
 
-## Local verification
+The supported zero-argument `after_build` hook calls the wrapper. It loads the
+installed HRMS Vite configuration with its existing dependency resolver, preserves
+all native plugins including PWA `injectManifest`, builds to the original HRMS
+frontend output and repeats the native index-to-`www/hrms.html` copy. These are
+**generated build artifacts**, not source changes to installed vendor files.
+A later HRMS-only build can overwrite this patch; run the payroll app hook last.
 
-Validated on the existing local bench with pinned Frappe 16.31.0, ERPNext 16.31.1,
-HRMS 16.16.0 and fictional actors/records. Login, workspace, populated Employee
-list/form, Salary Slip form, Payroll Readiness report, empty list filter, employee
-HRMS home, TP1/TP3 lists and mobile navigation were inspected. The HRMS manager
-without an employee link retains its native blocked/login state. Employee access
-was inspected with the existing employee fixture; no payroll records were saved,
-submitted, cancelled, paid or distributed.
+Required dependencies are existing Node/Vite/Vue/compiler-sfc/vite-plugin-pwa in
+HRMS's frontend, plus Pillow from the pinned Frappe environment. No dependency pin,
+Dockerfile, Compose, vendor source, service-worker source or new package changes
+are introduced. The existing production Dockerfile copies the new package files
+and its normal `bench build --production` runs this hook when this app is included.
+Do not substitute an HRMS-only build for that final step.
 
-Automated checks cover opt-in isolation and preservation of unrelated app icons
-and existing website-head content. Existing JavaScript syntax and Python suites
-must also pass. Browser captures belong to the task outputs, not this release.
+`branding_assets.py` derives 192/512px icons and all 30 pinned Apple splash sizes
+from approved PNG artwork, preserving every original splash media query. It does
+not redraw the mark. The 32 images and `asset-list.json` receipt are generated in
+`public/images/ocean6/pwa/`, ignored by Git, and included in the built image.
+They must exist and match their receipt before accepting a candidate. Source
+artwork is byte-for-byte from MCN's approved `deploy/nextcloud/runtime/branding/img`
+(`ocean6-logo.png`, `waves.svg`) and the earlier approved wordmark/icon copies.
+MCN is read only. The app remains GPL-3.0-or-later; upstream legal credits remain.
 
-## Release plan (not executed)
+## Cache, worker and installation contract
 
-1. Review the scoped diff and obtain separate deployment approval. This task does
-   not authorize a UI release, live build/restart, migration or ingress change.
-2. Build a candidate image from the reviewed branding commit through the existing
-   release process, only after separate build approval. The branding commit includes
-   the app-owned assets and regenerated release manifest; no candidate image has
-   been built or published as part of local release preparation.
-3. Validate the candidate and opt-in-off behavior in staging, including native
-   light/dark preferences, login, actual permitted employee/HR/payroll records,
-   mobile forms, navigation and reports. Retain user/tenant isolation denials.
-4. For the approved site only, enable the JSON numeric setting using the existing
-   deployment procedure. The local validation equivalent is:
-   `bench --site test.localhost set-config ocean6_branding 1 --parse`.
-   Refresh affected users' boot caches as well as website/browser caches after the approved asset
-   rollout. Do not apply these commands to the pilot without deployment approval.
-5. Confirm asset responses and populated behavior at 1440px and 390px. Check any
-   installed HRMS PWA separately: existing service-worker caches and its upstream
-   manifest/splash/icon/name are not replaced by this change.
+CSS and JS URLs use `?v=20261029-6` in both hooks and the standalone head. Bump both
+when editing these files. If changing artwork later, version the image paths/URLs as well; a CSS query bump alone does not invalidate long-cached PNGs. HRMS uses native Vite content-hashed bundles and the
+original `/assets/hrms/frontend/sw.js`, classic registration, config query,
+Workbox precaching/cleanup and Firebase background-notification code. No worker
+scope, authentication cache rule, skipWaiting/clientsClaim policy or push behavior
+is modified. No broad browser storage clearing, worker unregistration or session
+invalidation is a release/rollback step.
 
-Rollback presentation by restoring the previous site setting (or setting numeric
-`0`) and refreshing affected users' boot and website/browser caches through the approved procedure. Application processes may also require the normal approved reload to refresh cached site configuration.
-If image rollback is required, use the retained previous image and normal release
-process. No payroll, user, statutory or employee records need modification.
+A normal local update from native `index-BGng3SlX.js` to the branded compiled shell
+was tested in the same profile: worker URL/scope unchanged, new bundle precached,
+old precache entry removed and an isolated temporary storage probe retained. Only
+that probe was removed afterward; actual stored-user-data migration was not tested.
+Clean-profile manifest/icon parsing, native install prompt and activation passed.
 
-Live admin creation and SMTP configuration are separate operational work; this
-branding module neither creates accounts nor enables or sends email.
+**Inherited limitation:** the native manifest declares `/assets/hrms/frontend/`
+scope while its start URL is `/hrms`; Chromium ignores that manifest scope and
+normalizes it to `/`. The worker itself stays scoped to `/assets/hrms/frontend/`
+and does not control the `/hrms` navigation document (`controller=null` observed).
+This correction does not fix or broaden that boundary, so offline HRMS navigation
+is not accepted here. Actual OS installation, existing home-screen name refresh,
+iOS splash rendering and device-specific install/update UX remain device gates.
+Do not clear storage/unregister workers to claim those passed.
+
+## Validation and supported themes
+
+Real local fictional manager/employee paths cover auth/recovery/email-link entry
+without sending; workspace; populated/empty Employee list; Employee/Salary Slip
+forms; readiness report; permitted TP1/TP3 and HRMS navigation; native blocked
+manager-without-Employee state; native empty-login errors; keyboard focus; 1440px,
+390px and a 150% zoom approximation. Mobile form tabs are genuinely scrollable,
+with an added scrollbar cue; the clipped next label was not a missing tab.
+
+Native Desk Frappe Light and Timeless Night were exercised; dark text/surfaces
+were legible and the fictional manager's original Light preference was restored.
+HRMS does not implement a complete native dark theme in this pinned version;
+this change does not pretend that it does. Its branded supported shell remains
+light. Guest and unrelated-employee Salary Slip requests remained 403; permitted
+HR-manager read remained 200. No payroll/business record was saved/submitted.
+
+Run from the app checkout:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider
+npm run check:js
+node --check malaysia_workforce/build_hrms.mjs
+```
+
+Run the Vue compiler tests and actual hook integration from the existing bench:
+
+```bash
+HRMS_FRONTEND="$PWD/apps/hrms/frontend" node --test apps/malaysia_workforce/malaysia_workforce/tests/build_hrms.test.mjs
+bench build --apps malaysia_workforce --production
+```
+
+## Release and rollback boundary
+
+This correction is an uncommitted review candidate relative to `8c839725`; no
+production image build, publication, deployment, live reload or mail is approved.
+Regenerate the index-based release manifest after staging exactly the correction
+sources. Candidate image verification must include the transformed HRMS bundles,
+head/manifest, both asset symlinks (`hrms` and `malaysia_workforce`), and the generated
+PWA asset receipt, not just app source files or `assets.json`.
+
+No migration is required: schema/fixtures/patches/installation hooks are unchanged.
+Do not run `setup` (it migrates/reseeds), `install-app`, or `bench migrate` for this
+UI diff. A future approved rollout must recreate image consumers and refresh
+per-user boot plus website/browser caches. Set the site flag before new web
+processes start to avoid a second reload; frontend must resolve healthy new
+upstreams. Caddy/Nextcloud, DB/Redis and all business/user records are outside scope.
+
+Rollback can restore the previous site flag and native shared-shell branches, or
+restore the previous verified image through the approved process. Keep scope/ID
+semantics and user storage intact. Refresh affected boot/website caches and use
+ordinary browser/PWA update/reopen; device-visible metadata rollback is not
+instant or guaranteed without device acceptance. No storage/session reset is a
+shortcut. Mail remains disabled; password setup/login and the post-stack memory
+baseline remain separate operational gates.

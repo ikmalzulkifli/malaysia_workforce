@@ -13,3 +13,6 @@ dist/
 apps.json
 *.log
 ui-review/
+
+# Derived by the app-owned after_build identity asset pipeline.
+/malaysia_workforce/public/images/ocean6/pwa/
