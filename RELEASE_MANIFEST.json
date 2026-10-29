@@ -51,8 +51,8 @@
     },
     {
       "path": "deploy/vps/Caddyfile.payroll",
-      "size": 474,
-      "sha256": "5b9a06cd71c576ef47fd78fd63749da99d7743d50ef1ad8d5c7fbeeb8f74cb57"
+      "size": 1207,
+      "sha256": "7ad8fccfd87725a26671377c57a5150a570cd920ebfeaf3915340e1f538f432f"
     },
     {
       "path": "deploy/vps/Dockerfile",
@@ -61,8 +61,8 @@
     },
     {
       "path": "deploy/vps/README.md",
-      "size": 13008,
-      "sha256": "02ac1932b20ff5b99c4c8adad97771c26cd79547a1790a6f88fee67772a33d5c"
+      "size": 16623,
+      "sha256": "1c627d0d915a9760290cb2372a0a023e9f19582382523d59f8e0c89458eea14c"
     },
     {
       "path": "deploy/vps/backup.sh",
@@ -96,8 +96,8 @@
     },
     {
       "path": "deploy/vps/payroll.env.example",
-      "size": 698,
-      "sha256": "0f1413c1b9263fc7c2e7248837354f251db4301994ddb5efa0224ff86cc58531"
+      "size": 688,
+      "sha256": "3a2221a9b895521b1076b79e799c26b572106127d24fb6addf76bac93aff34bc"
     },
     {
       "path": "deploy/vps/restore.sh",
