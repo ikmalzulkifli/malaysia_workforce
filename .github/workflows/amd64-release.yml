@@ -22,6 +22,7 @@ jobs:
       - name: Build image
         run: |
           docker build --platform linux/amd64 \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
             -f deploy/vps/Dockerfile \
             -t "ocean6-payroll:pilot-${GITHUB_SHA::7}" .
 
