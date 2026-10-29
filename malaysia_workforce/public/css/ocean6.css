@@ -1,0 +1,122 @@
+/* Ocean 6 is enabled only for opted-in sites. Native semantic colors remain intact. */
+html[data-ocean6-brand] {
+  --font-stack: "Avenir Next", "Helvetica Neue", system-ui, sans-serif;
+  --ion-font-family: "Avenir Next", "Helvetica Neue", system-ui, sans-serif;
+  --ocean6-action: #c51f2a;
+  --ocean6-action-hover: #991923;
+  --ocean6-action-text: #fff;
+  --brand-color: #c51f2a;
+  --primary: #c51f2a;
+  --ion-color-primary: #c51f2a;
+  --ion-color-primary-rgb: 197, 31, 42;
+  --ion-color-primary-contrast: #fff;
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: #991923;
+  --ion-color-primary-tint: #cb3540;
+  --ion-tab-bar-color-selected: #c51f2a;
+}
+
+html[data-ocean6-brand]:not([data-theme="dark"]) {
+  --bg-color: #f2f0ea;
+  --fg-color: #fffefb;
+  --card-bg: #fffefb;
+  --navbar-bg: #fffefb;
+  --control-bg: #f2f0ea;
+  --control-bg-on-gray: #e9e6de;
+  --border-color: #ddd8cd;
+  --text-color: #121212;
+  --heading-color: #121212;
+  --text-muted: #66645e;
+  --ion-background-color: #f2f0ea;
+  --ion-text-color: #121212;
+  --ion-border-color: #ddd8cd;
+}
+
+html[data-ocean6-brand][data-theme="dark"] {
+  --ocean6-action: #f07880;
+  --ocean6-action-hover: #f49ba1;
+  --ocean6-action-text: #171717;
+  --brand-color: #f07880;
+  --primary: #f07880;
+  --ion-background-color: #171717;
+  --ion-text-color: #f5f3ee;
+  --ion-border-color: #494641;
+  --ion-color-primary: #f07880;
+  --ion-color-primary-rgb: 240, 120, 128;
+  --ion-color-primary-contrast: #171717;
+  --ion-color-primary-contrast-rgb: 23, 23, 23;
+  --ion-color-primary-shade: #d46a71;
+  --ion-color-primary-tint: #f1868d;
+  --ion-tab-bar-color-selected: #f07880;
+}
+
+html[data-ocean6-brand] body {
+  font-family: var(--font-stack);
+}
+
+html[data-ocean6-brand] .page-card-head .app-logo {
+  width: auto;
+  max-width: min(200px, 100%);
+  max-height: 72px;
+  object-fit: contain;
+}
+
+html[data-ocean6-brand] .login-content.page-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(18, 18, 18, 0.06);
+}
+
+html[data-ocean6-brand] :focus-visible {
+  outline: 2px solid var(--ocean6-action);
+  outline-offset: 2px;
+}
+
+html[data-ocean6-brand] .form-control:focus-visible {
+  box-shadow: none;
+}
+
+html[data-ocean6-brand] .btn-primary:not(:disabled):not(.disabled):not([aria-disabled="true"]),
+html[data-ocean6-brand] .btn-login:not(:disabled):not(.disabled):not([aria-disabled="true"]):not(.btn-login-option) {
+  background-color: var(--ocean6-action);
+  border-color: var(--ocean6-action);
+  color: var(--ocean6-action-text);
+}
+
+html[data-ocean6-brand] .btn-primary:not(:disabled):not(.disabled):not([aria-disabled="true"]):hover,
+html[data-ocean6-brand] .btn-login:not(:disabled):not(.disabled):not([aria-disabled="true"]):not(.btn-login-option):hover {
+  background-color: var(--ocean6-action-hover);
+  border-color: var(--ocean6-action-hover);
+}
+
+html[data-ocean6-brand] ::selection {
+  background: #e9b5b9;
+  color: #121212;
+}
+
+html[data-ocean6-brand] input,
+html[data-ocean6-brand] textarea {
+  caret-color: var(--ocean6-action);
+}
+
+html[data-ocean6-brand] .datatable .dt-cell,
+html[data-ocean6-brand] .grid-row {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 576px) {
+  html[data-ocean6-brand] .login-content.page-card {
+    max-width: calc(100vw - 32px);
+  }
+
+  html[data-ocean6-brand] .login-content .form-control,
+  html[data-ocean6-brand] .login-content .btn,
+  html[data-ocean6-brand] .form-layout .form-control,
+  html[data-ocean6-brand] .form-layout .btn,
+  html[data-ocean6-brand] .web-form .form-control,
+  html[data-ocean6-brand] .web-form .btn,
+  html[data-ocean6-brand] .modal .btn {
+    min-height: 44px;
+  }
+}

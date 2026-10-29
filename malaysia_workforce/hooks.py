@@ -63,3 +63,10 @@ has_permission = {
 	"Malaysia CP38 Directive": "malaysia_workforce.permissions.company_permission",
 	"Malaysia Statutory Filing": "malaysia_workforce.permissions.company_permission",
 }
+
+# Ocean 6 presentation is disabled unless the site sets ocean6_branding to 1.
+boot_session = "malaysia_workforce.branding.boot_session"
+update_website_context = "malaysia_workforce.branding.update_website_context"
+app_include_css = ["/assets/malaysia_workforce/css/ocean6.css?v=20261029"]
+app_include_js = ["/assets/malaysia_workforce/js/ocean6.js?v=20261029"]
+page_renderer = ["malaysia_workforce.branding_renderer.Ocean6HRMSPage"]

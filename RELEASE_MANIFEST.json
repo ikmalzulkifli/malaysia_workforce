@@ -2,7 +2,7 @@
   "app": "malaysia_workforce",
   "version": "1.0.0-rc.14",
   "generated_on": "2026-10-29",
-  "file_count": 159,
+  "file_count": 168,
   "files": [
     {
       "path": ".dockerignore",
@@ -53,6 +53,11 @@
       "path": "deploy/vps/Caddyfile.payroll",
       "size": 1207,
       "sha256": "7ad8fccfd87725a26671377c57a5150a570cd920ebfeaf3915340e1f538f432f"
+    },
+    {
+      "path": "deploy/vps/DEPLOYMENT_RECORD.md",
+      "size": 10150,
+      "sha256": "a1d7fd536761e281a283d04a154d62ced78623447bf977eb426faabac0601a59"
     },
     {
       "path": "deploy/vps/Dockerfile",
@@ -140,6 +145,11 @@
       "sha256": "ff89ede8980bc890eea9272926975cc1aa49e4599af10d3132f697bcff67381b"
     },
     {
+      "path": "docs/OCEAN6_BRANDING.md",
+      "size": 5315,
+      "sha256": "1827ddf4a89f8c69f3a63f169d1b593e5f798b79c70237719963324bb9273da0"
+    },
+    {
       "path": "docs/OPERATIONS.md",
       "size": 3018,
       "sha256": "3d1654b9429ffe6d9ff4d6817a9598f73c9da56d503107ddf1e691ec4a230ee8"
@@ -185,14 +195,24 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
+      "path": "malaysia_workforce/branding.py",
+      "size": 963,
+      "sha256": "16b044b7b21f6a8fc7afe8970b8cb737dc75b03162752a07187cb7d5b765e203"
+    },
+    {
+      "path": "malaysia_workforce/branding_renderer.py",
+      "size": 717,
+      "sha256": "565baefe960affc38b36fff03112f8dbbd99ba20a1857c05e04fc4049dea013a"
+    },
+    {
       "path": "malaysia_workforce/diagnostics.py",
       "size": 2289,
       "sha256": "c2d8b21ad718635adc653bbe7a807d72809e0398a20076121de4c8ad4fb9e0e4"
     },
     {
       "path": "malaysia_workforce/hooks.py",
-      "size": 2724,
-      "sha256": "c14d027018ac13b2c3c7aa04bc6d847f18038adacd5dd1157395fbf950b17068"
+      "size": 3158,
+      "sha256": "51792502962a3baf5a1d71418fa3ad00204c32d60b9eba8e8ff75bc1f768ff67"
     },
     {
       "path": "malaysia_workforce/install.py",
@@ -550,9 +570,29 @@
       "sha256": "999070293c8a098e714bbb35771cd850e6c72c684862caffa0fa71d528857df5"
     },
     {
+      "path": "malaysia_workforce/public/css/ocean6.css",
+      "size": 3696,
+      "sha256": "40875a0abcdef4c8ab0ce7a5d0e66492d9c676ce5233cde4e289c9f0c4ca4f82"
+    },
+    {
       "path": "malaysia_workforce/public/images/logo.svg",
       "size": 235,
       "sha256": "dff7a4055ddcca9eda5a74daf47d192556c6d1d9f6c3074e9a81581f6c29f2c8"
+    },
+    {
+      "path": "malaysia_workforce/public/images/ocean6/icon.png",
+      "size": 40058,
+      "sha256": "6a12c6e1d55219047b1cf5cbb841f01d7d527feb0d2410ea486ef225ceec1d41"
+    },
+    {
+      "path": "malaysia_workforce/public/images/ocean6/wordmark.png",
+      "size": 71618,
+      "sha256": "f81b8dad8d5e8d5943daf5df7420a506c18cf0145c09b107604ab75c547385b8"
+    },
+    {
+      "path": "malaysia_workforce/public/js/ocean6.js",
+      "size": 191,
+      "sha256": "bc5def7db7060c6516a96828d6b9b1201fa12ea239667ae1a37f2c1ee4c2887c"
     },
     {
       "path": "malaysia_workforce/public/js/payroll_entry.js",
@@ -728,6 +768,11 @@
       "path": "malaysia_workforce/tests/test_accumulation.py",
       "size": 5224,
       "sha256": "01e958aac7f06727cdc00dba4c055caa4fff87cf84549a86079783d2e2258e0f"
+    },
+    {
+      "path": "malaysia_workforce/tests/test_branding.py",
+      "size": 2049,
+      "sha256": "d873c93149306349d151e896a4b13204e8e7900de81f1d2768ceca2702db24bb"
     },
     {
       "path": "malaysia_workforce/tests/test_contributions.py",
